@@ -29,15 +29,13 @@
     "keybindings"
   ],
   "engines": {
-    "vscode": "^1.0.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:extension.pasteImage"
-  ],
-  "main": "./out/src/extension",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
       "type": "object",
@@ -70,8 +68,8 @@
         },
         "pasteImage.defaultName": {
           "type": "string",
-          "default": "Y-MM-DD-HH-mm-ss",
-          "description": "The default image file name. The value of this config will be pass to the 'format' function of moment library(a js time manipulation library), you can read document https://momentjs.com/docs/#/displaying/format/ for advanced usage."
+          "default": "YYYY-MM-DD-HH-mm-ss",
+          "description": "The default image file name. The value of this config will be pass to the 'format' function of dayjs library(a js time manipulation library), you can read document https://day.js.org/docs/en/display/format for advanced usage."
         },
         "pasteImage.namePrefix": {
           "type": "string",
@@ -118,6 +116,10 @@
       {
         "command": "extension.pasteImage",
         "title": "Paste Image"
+      },
+      {
+        "command": "extension.renameImage",
+        "title": "Paste Image: Rename Image at Cursor"
       }
     ],
     "keybindings": [
@@ -126,22 +128,44 @@
         "key": "ctrl+alt+v",
         "mac": "cmd+alt+v",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "extension.renameImage",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorTextFocus && editorLangId =~ /markdown|asciidoc/"
       }
     ]
   },
   "scripts": {
-    "vscode:prepublish": "node ./node_modules/vscode/bin/compile",
-    "compile": "node ./node_modules/vscode/bin/compile -watch -p ./",
-    "postinstall": "node ./node_modules/vscode/bin/install"
+    "vscode:prepublish": "npm run build",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build": "node esbuild.js",
+    "build:watch": "node esbuild.js --watch",
+    "package": "npm run build && vsce package",
+    "lint": "eslint src --ext ts",
+    "lint:fix": "eslint src --ext ts --fix",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js"
   },
   "dependencies": {
-    "copy-paste": "^1.2.0",
-    "fs-extra": "^3.0.1",
-    "moment": "^2.14.1",
-    "upath": "^1.0.0"
+    "dayjs": "^1.11.10",
+    "upath": "^2.0.1"
   },
   "devDependencies": {
-    "typescript": "^1.8.5",
-    "vscode": "^0.11.0"
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.56.0",
+    "glob": "^13.0.0",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.3"
   }
 }
