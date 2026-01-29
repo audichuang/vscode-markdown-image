@@ -1,20 +1,19 @@
 {
-  "name": "vscode-paste-image",
-  "displayName": "Paste Image",
-  "description": "paste image from clipboard directly",
-  "version": "1.0.4",
-  "publisher": "mushan",
+  "name": "markink",
+  "displayName": "MarkInk",
+  "description": "Markdown productivity toolkit - paste images, rename, outline navigation and more",
+  "version": "1.0.0",
+  "publisher": "audichuang",
   "author": {
-    "name": "mushan",
-    "email": "mushanmail@126.com"
+    "name": "audichuang"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mushanshitiancai/vscode-paste-image.git"
+    "url": "https://github.com/audichuang/vscode-markdown-image.git"
   },
-  "homepage": "https://github.com/mushanshitiancai/vscode-paste-image/blob/master/README.md",
+  "homepage": "https://github.com/audichuang/vscode-markdown-image/blob/master/README.md",
   "bugs": {
-    "url": "https://github.com/mushanshitiancai/vscode-paste-image/issues"
+    "url": "https://github.com/audichuang/vscode-markdown-image/issues"
   },
   "icon": "res/icon.png",
   "galleryBanner": {
@@ -22,11 +21,12 @@
     "theme": "dark"
   },
   "keywords": [
-    "paste",
-    "image",
     "markdown",
-    "paste image",
-    "keybindings"
+    "image",
+    "paste",
+    "outline",
+    "documentation",
+    "productivity"
   ],
   "engines": {
     "vscode": "^1.85.0"
@@ -39,98 +39,135 @@
   "contributes": {
     "configuration": {
       "type": "object",
-      "title": "Paste Image Configuration",
+      "title": "MarkInk Configuration",
       "properties": {
-        "pasteImage.path": {
+        "markink.imagePath": {
           "type": "string",
           "default": "${currentFileDir}",
-          "description": "The destination to save image file.You can use variable ${currentFileDir} and ${projectRoot}. ${currentFileDir} will be replace by the path of directory that contain current editing file. ${projectRoot} will be replace by path of the project opened in vscode."
+          "description": "The destination to save image file. You can use variables: ${currentFileDir}, ${projectRoot}, ${currentFileName}, ${currentFileNameWithoutExt}"
         },
-        "pasteImage.basePath": {
+        "markink.imageBasePath": {
           "type": "string",
           "default": "${currentFileDir}",
-          "description": "The base path of image url.You can use variable ${currentFileDir} and ${projectRoot}. ${currentFileDir} will be replace by the path of directory that contain current editing file. ${projectRoot} will be replace by path of the project opened in vscode. If you set basePath to empty String, it will insert absolute path to file."
+          "description": "The base path for calculating relative image URLs. Leave empty for absolute paths."
         },
-        "pasteImage.forceUnixStyleSeparator": {
+        "markink.forceUnixStyleSeparator": {
           "type": "boolean",
           "default": true,
-          "description": "Force set the file separator styel to unix style. If set false, separator styel will follow the system style."
+          "description": "Force Unix-style path separators (/) in image paths."
         },
-        "pasteImage.prefix": {
+        "markink.imagePrefix": {
           "type": "string",
           "default": "",
-          "description": "The string prepend to the resolved image path before paste."
+          "description": "String to prepend to the image path."
         },
-        "pasteImage.suffix": {
+        "markink.imageSuffix": {
           "type": "string",
           "default": "",
-          "description": "The string append to the resolved image path before paste."
+          "description": "String to append to the image path."
         },
-        "pasteImage.defaultName": {
+        "markink.defaultImageName": {
           "type": "string",
           "default": "YYYY-MM-DD-HH-mm-ss",
-          "description": "The default image file name. The value of this config will be pass to the 'format' function of dayjs library(a js time manipulation library), you can read document https://day.js.org/docs/en/display/format for advanced usage."
+          "description": "Default image filename format (dayjs format). See: https://day.js.org/docs/en/display/format"
         },
-        "pasteImage.namePrefix": {
+        "markink.imageNamePrefix": {
           "type": "string",
           "default": "",
-          "description": "The string prepend to the image file name."
+          "description": "String to prepend to the image filename."
         },
-        "pasteImage.nameSuffix": {
+        "markink.imageNameSuffix": {
           "type": "string",
           "default": "",
-          "description": "The string append to the image file name."
+          "description": "String to append to the image filename."
         },
-        "pasteImage.encodePath": {
+        "markink.encodePath": {
           "type": "string",
-          "enum": [
-            "none",
-            "urlEncode",
-            "urlEncodeSpace"
-          ],
+          "enum": ["none", "urlEncode", "urlEncodeSpace"],
           "default": "urlEncodeSpace",
-          "description": "The string append to the image file name.How to encode image path before insert to editor. Support options: none, urlEncode, urlEncodeSpace"
+          "description": "How to encode the image path: none, urlEncode, or urlEncodeSpace"
         },
-        "pasteImage.insertPattern": {
+        "markink.insertPattern": {
           "type": "string",
           "default": "${imageSyntaxPrefix}${imageFilePath}${imageSyntaxSuffix}",
-          "description": "The pattern of string that would be pasted to text."
+          "description": "Pattern for inserting image reference into document."
         },
-        "pasteImage.showFilePathConfirmInputBox": {
+        "markink.showFilePathConfirmInputBox": {
           "type": "boolean",
           "default": false,
-          "description": "Set to true if you want to be able to change the file path or name prior to saving the file to disk"
+          "description": "Show input box to confirm/modify file path before saving."
         },
-        "pasteImage.filePathConfirmInputBoxMode": {
+        "markink.filePathConfirmInputBoxMode": {
           "type": "string",
-          "enum": [
-            "fullPath",
-            "onlyName"
-          ],
+          "enum": ["fullPath", "onlyName"],
           "default": "fullPath",
-          "description": "Set the mode of file path confirm inputbox"
+          "description": "Mode for file path confirmation: fullPath or onlyName"
         }
       }
     },
     "commands": [
       {
-        "command": "extension.pasteImage",
-        "title": "Paste Image"
+        "command": "markink.pasteImage",
+        "title": "MarkInk: Paste Image",
+        "icon": "$(file-media)"
       },
       {
-        "command": "extension.renameImage",
-        "title": "Paste Image: Rename Image at Cursor"
+        "command": "markink.renameImage",
+        "title": "MarkInk: Rename Image at Cursor",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "markink.configure",
+        "title": "MarkInk: Configure Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "markink.showSettings",
+        "title": "MarkInk: Show Current Settings",
+        "icon": "$(info)"
+      },
+      {
+        "command": "markink.refreshOutline",
+        "title": "MarkInk: Refresh Outline",
+        "icon": "$(refresh)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "markink",
+          "title": "MarkInk",
+          "icon": "res/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "markink": [
+        {
+          "id": "markinkOutline",
+          "name": "Document Outline",
+          "when": "resourceLangId == markdown"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "markink.refreshOutline",
+          "when": "view == markinkOutline",
+          "group": "navigation"
+        }
+      ]
+    },
     "keybindings": [
       {
-        "command": "extension.pasteImage",
+        "command": "markink.pasteImage",
         "key": "ctrl+alt+v",
         "mac": "cmd+alt+v",
         "when": "editorTextFocus"
       },
       {
-        "command": "extension.renameImage",
+        "command": "markink.renameImage",
         "key": "ctrl+shift+r",
         "mac": "cmd+shift+r",
         "when": "editorTextFocus && editorLangId =~ /markdown|asciidoc/"
@@ -162,7 +199,7 @@
     "@typescript-eslint/parser": "^6.19.0",
     "@vscode/test-electron": "^2.3.8",
     "@vscode/vsce": "^2.22.0",
-    "esbuild": "^0.20.0",
+    "esbuild": "^0.25.0",
     "eslint": "^8.56.0",
     "glob": "^13.0.0",
     "mocha": "^10.2.0",
