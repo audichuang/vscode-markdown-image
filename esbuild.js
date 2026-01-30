@@ -8,10 +8,9 @@ const buildOptions = {
   outfile: 'dist/extension.js',
   external: [
     'vscode',
-    'jsdom',          // jsdom 有外部資源檔案，不能打包
-    'canvas',         // jsdom 選擇性依賴
-    'bufferutil',     // jsdom 選擇性依賴
-    'utf-8-validate', // jsdom 選擇性依賴
+    'canvas',         // 原生模組，無法打包
+    'bufferutil',     // 原生模組，無法打包
+    'utf-8-validate', // 原生模組，無法打包
   ],
   format: 'cjs',
   platform: 'node',
