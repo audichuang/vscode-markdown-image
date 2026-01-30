@@ -196,7 +196,15 @@ export async function paste(): Promise<void> {
         return;
     }
 
-    const exists = fs.existsSync(imagePath);
+    // Use async file check to avoid blocking UI
+    let exists = false;
+    try {
+        await fs.promises.access(imagePath, fs.constants.F_OK);
+        exists = true;
+    } catch {
+        exists = false;
+    }
+
     if (exists) {
         const choice = await logger.showInformationMessage(
             `File ${imagePath} existed. Would you want to replace?`,

@@ -8,12 +8,7 @@ import * as mammoth from 'mammoth';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { JSDOM } from 'jsdom';
-
-export interface ConversionResult {
-    markdown: string;
-    imageCount: number;
-    warnings: string[];
-}
+import { ConversionResult } from './types';
 
 export async function convertDocxToMarkdown(
     docxPath: string,
@@ -107,22 +102,26 @@ export async function convertDocxToMarkdown(
 
 function preprocessComplexTables(html: string): string {
     const dom = new JSDOM(html);
-    const doc = dom.window.document;
-    const allTables = doc.querySelectorAll('table');
+    try {
+        const doc = dom.window.document;
+        const allTables = doc.querySelectorAll('table');
 
-    for (const table of allTables) {
-        if (table.parentElement?.closest('table')) continue;
+        for (const table of allTables) {
+            if (table.parentElement?.closest('table')) continue;
 
-        if (isComplexTable(table)) {
-            // 使用自定義標籤，Turndown 才能正確識別
-            const wrapper = doc.createElement('complex-table');
-            wrapper.setAttribute('data-html', table.outerHTML);
-            wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
-            table.parentNode?.replaceChild(wrapper, table);
+            if (isComplexTable(table)) {
+                // 使用自定義標籤，Turndown 才能正確識別
+                const wrapper = doc.createElement('complex-table');
+                wrapper.setAttribute('data-html', table.outerHTML);
+                wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
+                table.parentNode?.replaceChild(wrapper, table);
+            }
         }
-    }
 
-    return doc.body.innerHTML;
+        return doc.body.innerHTML;
+    } finally {
+        dom.window.close();
+    }
 }
 
 function isComplexTable(table: Element): boolean {
@@ -145,57 +144,61 @@ function isComplexTable(table: Element): boolean {
 
 function convertSimpleTableToMarkdown(tableHtml: string, turndownService: TurndownService): string {
     const dom = new JSDOM(tableHtml);
-    const doc = dom.window.document;
-    const table = doc.querySelector('table');
+    try {
+        const doc = dom.window.document;
+        const table = doc.querySelector('table');
 
-    if (!table) return '';
+        if (!table) return '';
 
-    const rows: string[][] = [];
-    const tableRows = table.querySelectorAll('tr');
+        const rows: string[][] = [];
+        const tableRows = table.querySelectorAll('tr');
 
-    for (const tr of tableRows) {
-        const cells: string[] = [];
-        const tableCells = tr.querySelectorAll('td, th');
+        for (const tr of tableRows) {
+            const cells: string[] = [];
+            const tableCells = tr.querySelectorAll('td, th');
 
-        for (const cell of tableCells) {
-            let md = turndownService.turndown(cell.innerHTML);
-            md = md.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
-            cells.push(md);
+            for (const cell of tableCells) {
+                let md = turndownService.turndown(cell.innerHTML);
+                md = md.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+                cells.push(md);
+            }
+
+            if (cells.length > 0) {
+                rows.push(cells);
+            }
         }
 
-        if (cells.length > 0) {
-            rows.push(cells);
+        if (rows.length === 0) return '';
+
+        const colCount = Math.max(...rows.map(r => r.length));
+        const colWidths: number[] = Array(colCount).fill(3);
+
+        for (const row of rows) {
+            for (let i = 0; i < row.length; i++) {
+                colWidths[i] = Math.max(colWidths[i], row[i].length);
+            }
         }
-    }
 
-    if (rows.length === 0) return '';
-
-    const colCount = Math.max(...rows.map(r => r.length));
-    const colWidths: number[] = Array(colCount).fill(3);
-
-    for (const row of rows) {
-        for (let i = 0; i < row.length; i++) {
-            colWidths[i] = Math.max(colWidths[i], row[i].length);
-        }
-    }
-
-    const lines: string[] = [];
-    const header = rows[0] || [];
-    const headerCells = [];
-    for (let i = 0; i < colCount; i++) {
-        headerCells.push((header[i] || '').padEnd(colWidths[i]));
-    }
-    lines.push('| ' + headerCells.join(' | ') + ' |');
-    lines.push('| ' + colWidths.map(w => '-'.repeat(w)).join(' | ') + ' |');
-
-    for (let r = 1; r < rows.length; r++) {
-        const row = rows[r];
-        const cells = [];
+        const lines: string[] = [];
+        const header = rows[0] || [];
+        const headerCells = [];
         for (let i = 0; i < colCount; i++) {
-            cells.push((row[i] || '').padEnd(colWidths[i]));
+            headerCells.push((header[i] || '').padEnd(colWidths[i]));
         }
-        lines.push('| ' + cells.join(' | ') + ' |');
-    }
+        lines.push('| ' + headerCells.join(' | ') + ' |');
+        lines.push('| ' + colWidths.map(w => '-'.repeat(w)).join(' | ') + ' |');
 
-    return '\n' + lines.join('\n') + '\n';
+        for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            const cells = [];
+            for (let i = 0; i < colCount; i++) {
+                cells.push((row[i] || '').padEnd(colWidths[i]));
+            }
+            lines.push('| ' + cells.join(' | ') + ' |');
+        }
+
+        return '\n' + lines.join('\n') + '\n';
+    } finally {
+        dom.window.close();
+    }
 }

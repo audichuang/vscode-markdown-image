@@ -6,13 +6,14 @@ import { MarkdownOutlineProvider, gotoHeading } from './outline';
 import { ImageListProvider, gotoImage } from './imageList';
 import { ToolsPanelProvider } from './toolsPanel';
 import { insertToc, formatTable, insertTable } from './tableUtils';
-import { convertWordToMarkdown } from './wordConverter';
-import { checkImageLinks, initDiagnostics } from './imageChecker';
+import { convertWordToMarkdown } from './word';
+import { checkImageLinks, initDiagnostics, initReportProvider } from './imageChecker';
 import { initLogger, log, showErrorMessage } from './logger';
 
 export function activate(context: vscode.ExtensionContext): void {
     initLogger(context);
     initDiagnostics(context);
+    initReportProvider(context);
     log('Extension "MarkInk" is now active!');
 
     // === Image Commands ===
@@ -155,6 +156,7 @@ export function activate(context: vscode.ExtensionContext): void {
         imageTreeView,
         gotoImageDisposable,
         // Tools panel
+        toolsProvider,
         toolsTreeView,
         // Table commands
         insertTocDisposable,

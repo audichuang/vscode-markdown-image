@@ -1,16 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as mammoth from 'mammoth';
+import mammoth from 'mammoth';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { JSDOM } from 'jsdom';
-import { log, showInformationMessage, showErrorMessage } from './logger';
-
-interface ExtractedImage {
-    newName: string;
-    buffer: Buffer;
-}
+import { log, showInformationMessage, showErrorMessage } from '../logger';
+import { ConversionResult } from './types';
 
 export async function convertWordToMarkdown(): Promise<void> {
     // Step 1: 選擇 Word 檔案
@@ -111,12 +107,6 @@ export async function convertWordToMarkdown(): Promise<void> {
             log(`Conversion error: ${(err as Error).message}`);
         }
     });
-}
-
-export interface ConversionResult {
-    markdown: string;
-    imageCount: number;
-    warnings: string[];
 }
 
 export async function convertDocxWithImages(
@@ -233,28 +223,32 @@ export async function convertDocxWithImages(
  */
 function preprocessComplexTables(html: string): string {
     const dom = new JSDOM(html);
-    const doc = dom.window.document;
+    try {
+        const doc = dom.window.document;
 
-    // 找出所有頂層表格（不是巢狀在其他表格內的）
-    const allTables = doc.querySelectorAll('table');
+        // 找出所有頂層表格（不是巢狀在其他表格內的）
+        const allTables = doc.querySelectorAll('table');
 
-    for (const table of allTables) {
-        // 跳過已經在另一個表格內的表格（巢狀表格）
-        if (table.parentElement?.closest('table')) {
-            continue;
+        for (const table of allTables) {
+            // 跳過已經在另一個表格內的表格（巢狀表格）
+            if (table.parentElement?.closest('table')) {
+                continue;
+            }
+
+            // 判斷是否為複雜表格
+            if (isComplexTable(table)) {
+                // 使用自定義標籤，Turndown 才能正確識別
+                const wrapper = doc.createElement('complex-table');
+                wrapper.setAttribute('data-html', table.outerHTML);
+                wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
+                table.parentNode?.replaceChild(wrapper, table);
+            }
         }
 
-        // 判斷是否為複雜表格
-        if (isComplexTable(table)) {
-            // 使用自定義標籤，Turndown 才能正確識別
-            const wrapper = doc.createElement('complex-table');
-            wrapper.setAttribute('data-html', table.outerHTML);
-            wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
-            table.parentNode?.replaceChild(wrapper, table);
-        }
+        return doc.body.innerHTML;
+    } finally {
+        dom.window.close();
     }
-
-    return doc.body.innerHTML;
 }
 
 /**
@@ -291,118 +285,80 @@ function isComplexTable(table: Element): boolean {
 }
 
 /**
- * 判斷表格是否過於複雜，應該保留 HTML 格式
- * 複雜表格包含：圖片、巢狀列表、巢狀表格、合併儲存格
- */
-function shouldKeepHtmlTable(tableHtml: string): boolean {
-    const dom = new JSDOM(tableHtml);
-    const doc = dom.window.document;
-    const table = doc.querySelector('table');
-
-    if (!table) {
-        return false;
-    }
-
-    // 檢查是否有圖片
-    if (table.querySelectorAll('img').length > 0) {
-        return true;
-    }
-
-    // 檢查是否有巢狀列表
-    if (table.querySelectorAll('ul, ol').length > 0) {
-        return true;
-    }
-
-    // 檢查是否有巢狀表格（只要有任何子表格就算複雜）
-    if (table.querySelectorAll('table').length > 0) {
-        return true;
-    }
-
-    // 檢查是否有合併儲存格
-    const cells = table.querySelectorAll('td, th');
-    for (const cell of cells) {
-        const colspan = cell.getAttribute('colspan');
-        const rowspan = cell.getAttribute('rowspan');
-        if ((colspan && parseInt(colspan, 10) > 1) ||
-            (rowspan && parseInt(rowspan, 10) > 1)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
  * 將簡單的 HTML 表格轉換為 Markdown 格式
  * 使用 TurndownService 處理單元格內容，保留粗體、連結等格式
  */
 function convertSimpleTableToMarkdown(tableHtml: string, turndownService: TurndownService): string {
     const dom = new JSDOM(tableHtml);
-    const doc = dom.window.document;
-    const table = doc.querySelector('table');
+    try {
+        const doc = dom.window.document;
+        const table = doc.querySelector('table');
 
-    if (!table) {
-        return '';
-    }
-
-    const rows: string[][] = [];
-    const tableRows = table.querySelectorAll('tr');
-
-    for (const tr of tableRows) {
-        const cells: string[] = [];
-        const tableCells = tr.querySelectorAll('td, th');
-
-        for (const cell of tableCells) {
-            // 任務 2：使用 Turndown 處理單元格內容，保留格式
-            const cellContent = getCellContent(cell.innerHTML, turndownService);
-            cells.push(cellContent);
+        if (!table) {
+            return '';
         }
 
-        if (cells.length > 0) {
-            rows.push(cells);
+        const rows: string[][] = [];
+        const tableRows = table.querySelectorAll('tr');
+
+        for (const tr of tableRows) {
+            const cells: string[] = [];
+            const tableCells = tr.querySelectorAll('td, th');
+
+            for (const cell of tableCells) {
+                // 任務 2：使用 Turndown 處理單元格內容，保留格式
+                const cellContent = getCellContent(cell.innerHTML, turndownService);
+                cells.push(cellContent);
+            }
+
+            if (cells.length > 0) {
+                rows.push(cells);
+            }
         }
-    }
 
-    if (rows.length === 0) {
-        return '';
-    }
-
-    // 計算欄寬
-    const colCount = Math.max(...rows.map(r => r.length));
-    const colWidths: number[] = Array(colCount).fill(3);
-
-    for (const row of rows) {
-        for (let i = 0; i < row.length; i++) {
-            colWidths[i] = Math.max(colWidths[i], row[i].length);
+        if (rows.length === 0) {
+            return '';
         }
-    }
 
-    // 產生表格
-    const lines: string[] = [];
+        // 計算欄寬
+        const colCount = Math.max(...rows.map(r => r.length));
+        const colWidths: number[] = Array(colCount).fill(3);
 
-    // Header
-    const header = rows[0] || [];
-    const headerCells = [];
-    for (let i = 0; i < colCount; i++) {
-        headerCells.push((header[i] || '').padEnd(colWidths[i]));
-    }
-    lines.push('| ' + headerCells.join(' | ') + ' |');
+        for (const row of rows) {
+            for (let i = 0; i < row.length; i++) {
+                colWidths[i] = Math.max(colWidths[i], row[i].length);
+            }
+        }
 
-    // Separator
-    const separators = colWidths.map(w => '-'.repeat(w));
-    lines.push('| ' + separators.join(' | ') + ' |');
+        // 產生表格
+        const lines: string[] = [];
 
-    // Data rows
-    for (let r = 1; r < rows.length; r++) {
-        const row = rows[r];
-        const cells = [];
+        // Header
+        const header = rows[0] || [];
+        const headerCells = [];
         for (let i = 0; i < colCount; i++) {
-            cells.push((row[i] || '').padEnd(colWidths[i]));
+            headerCells.push((header[i] || '').padEnd(colWidths[i]));
         }
-        lines.push('| ' + cells.join(' | ') + ' |');
-    }
+        lines.push('| ' + headerCells.join(' | ') + ' |');
 
-    return '\n' + lines.join('\n') + '\n';
+        // Separator
+        const separators = colWidths.map(w => '-'.repeat(w));
+        lines.push('| ' + separators.join(' | ') + ' |');
+
+        // Data rows
+        for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            const cells = [];
+            for (let i = 0; i < colCount; i++) {
+                cells.push((row[i] || '').padEnd(colWidths[i]));
+            }
+            lines.push('| ' + cells.join(' | ') + ' |');
+        }
+
+        return '\n' + lines.join('\n') + '\n';
+    } finally {
+        dom.window.close();
+    }
 }
 
 /**

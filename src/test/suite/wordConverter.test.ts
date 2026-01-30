@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as mammoth from 'mammoth';
 import TurndownService from 'turndown';
-import { sanitizeFileName } from '../../wordConverter';
+import { sanitizeFileName } from '../../word';
 
 suite('Word Converter Test Suite', () => {
     const fixturesDir = path.join(__dirname, '..', '..', '..', 'src', 'test', 'fixtures');

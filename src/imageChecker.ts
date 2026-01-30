@@ -11,6 +11,38 @@ interface ImageCheckResult {
     fullPath: string;
 }
 
+// Virtual document provider for image check reports
+class ImageReportProvider implements vscode.TextDocumentContentProvider {
+    private _content: string = '';
+    private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
+
+    readonly onDidChange = this._onDidChange.event;
+
+    setContent(content: string): void {
+        this._content = content;
+        this._onDidChange.fire(vscode.Uri.parse('markink-report:image-check'));
+    }
+
+    provideTextDocumentContent(): string {
+        return this._content;
+    }
+
+    dispose(): void {
+        this._onDidChange.dispose();
+    }
+}
+
+// Singleton instance for report provider
+let reportProvider: ImageReportProvider | undefined;
+
+export function initReportProvider(context: vscode.ExtensionContext): void {
+    reportProvider = new ImageReportProvider();
+    context.subscriptions.push(
+        vscode.workspace.registerTextDocumentContentProvider('markink-report', reportProvider),
+        reportProvider
+    );
+}
+
 export async function checkImageLinks(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -24,7 +56,8 @@ export async function checkImageLinks(): Promise<void> {
         return;
     }
 
-    const results = scanImageLinks(document);
+    // Use async file checking
+    const results = await scanImageLinksAsync(document);
     const missing = results.filter(r => !r.exists);
     const valid = results.filter(r => r.exists);
 
@@ -38,18 +71,29 @@ export async function checkImageLinks(): Promise<void> {
         return;
     }
 
-    // 顯示報告
+    // 顯示報告 - use virtual document provider to avoid memory accumulation
     const report = generateReport(results, document.uri.fsPath);
 
-    const doc = await vscode.workspace.openTextDocument({
-        content: report,
-        language: 'markdown'
-    });
-
-    await vscode.window.showTextDocument(doc, {
-        viewColumn: vscode.ViewColumn.Beside,
-        preview: true
-    });
+    if (reportProvider) {
+        reportProvider.setContent(report);
+        const reportDoc = await vscode.workspace.openTextDocument(vscode.Uri.parse('markink-report:image-check.md'));
+        // Set language mode to markdown for syntax highlighting
+        await vscode.languages.setTextDocumentLanguage(reportDoc, 'markdown');
+        await vscode.window.showTextDocument(reportDoc, {
+            viewColumn: vscode.ViewColumn.Beside,
+            preview: true
+        });
+    } else {
+        // Fallback if provider not initialized
+        const doc = await vscode.workspace.openTextDocument({
+            content: report,
+            language: 'markdown'
+        });
+        await vscode.window.showTextDocument(doc, {
+            viewColumn: vscode.ViewColumn.Beside,
+            preview: true
+        });
+    }
 
     // 加入診斷
     updateDiagnostics(document, missing);
@@ -57,19 +101,23 @@ export async function checkImageLinks(): Promise<void> {
     log(`Image check: ${valid.length} valid, ${missing.length} missing`);
 }
 
-function scanImageLinks(document: vscode.TextDocument): ImageCheckResult[] {
+/**
+ * Async version of scanImageLinks - doesn't block UI for large files
+ */
+async function scanImageLinksAsync(document: vscode.TextDocument): Promise<ImageCheckResult[]> {
     const results: ImageCheckResult[] = [];
     const text = document.getText();
     const documentDir = path.dirname(document.uri.fsPath);
 
     // 改進的正則表達式：處理帶有 title 的圖片語法，支援跨行路徑
-    // 使用 [\s\S] 來匹配包含換行的任意字元
     const markdownImageRegex = /!\[([^\]]*)\]\(([^)\s]+(?:\s+[^)\s]+)*)(?:\s+"[^"]*")?\)/g;
     // AsciiDoc 圖片語法
     const asciidocImageRegex = /image::?([^\[\s]+)\[/g;
 
     const isAsciidoc = document.languageId === 'asciidoc';
     const regex = isAsciidoc ? asciidocImageRegex : markdownImageRegex;
+
+    const pendingChecks: { match: RegExpExecArray; imagePath: string; fullPath: string }[] = [];
 
     let match: RegExpExecArray | null;
     while ((match = regex.exec(text)) !== null) {
@@ -98,27 +146,36 @@ function scanImageLinks(document: vscode.TextDocument): ImageCheckResult[] {
             ? decodedPath
             : path.resolve(documentDir, decodedPath);
 
-        let exists = false;
-        try {
-            exists = fs.existsSync(fullPath);
-        } catch {
-            exists = false;
-        }
-
-        // 計算行號和列號
-        const linesBefore = text.substring(0, match.index).split('\n');
-        const lineNumber = linesBefore.length - 1;
-        const column = linesBefore[linesBefore.length - 1].length;
-
-        results.push({
-            path: imagePath,
-            line: lineNumber,
-            column: column,
-            exists,
-            fullPath
-        });
+        pendingChecks.push({ match, imagePath, fullPath });
     }
 
+    // Check all files asynchronously in parallel
+    const checkResults = await Promise.all(
+        pendingChecks.map(async ({ match, imagePath, fullPath }) => {
+            let exists = false;
+            try {
+                await fs.promises.access(fullPath, fs.constants.F_OK);
+                exists = true;
+            } catch {
+                exists = false;
+            }
+
+            // 計算行號和列號
+            const linesBefore = text.substring(0, match.index).split('\n');
+            const lineNumber = linesBefore.length - 1;
+            const column = linesBefore[linesBefore.length - 1].length;
+
+            return {
+                path: imagePath,
+                line: lineNumber,
+                column: column,
+                exists,
+                fullPath
+            };
+        })
+    );
+
+    results.push(...checkResults);
     return results;
 }
 

@@ -53,7 +53,7 @@ const TOOLS: ToolItem[] = [
     }
 ];
 
-export class ToolsPanelProvider implements vscode.TreeDataProvider<ToolTreeItem> {
+export class ToolsPanelProvider implements vscode.TreeDataProvider<ToolTreeItem>, vscode.Disposable {
     private _onDidChangeTreeData: vscode.EventEmitter<ToolTreeItem | undefined | null | void> = new vscode.EventEmitter<ToolTreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<ToolTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
@@ -69,6 +69,10 @@ export class ToolsPanelProvider implements vscode.TreeDataProvider<ToolTreeItem>
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
+    }
+
+    dispose(): void {
+        this._onDidChangeTreeData.dispose();
     }
 }
 
