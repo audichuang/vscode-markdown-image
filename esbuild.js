@@ -6,7 +6,13 @@ const buildOptions = {
   entryPoints: ['src/extension.ts'],
   bundle: true,
   outfile: 'dist/extension.js',
-  external: ['vscode'],
+  external: [
+    'vscode',
+    'jsdom',          // jsdom 有外部資源檔案，不能打包
+    'canvas',         // jsdom 選擇性依賴
+    'bufferutil',     // jsdom 選擇性依賴
+    'utf-8-validate', // jsdom 選擇性依賴
+  ],
   format: 'cjs',
   platform: 'node',
   target: 'node18',

@@ -3,13 +3,19 @@ import { paste } from './paster';
 import { renameImage } from './renameImage';
 import { configureSettings, showCurrentSettings } from './configUI';
 import { MarkdownOutlineProvider, gotoHeading } from './outline';
+import { ImageListProvider, gotoImage } from './imageList';
+import { ToolsPanelProvider } from './toolsPanel';
+import { insertToc, formatTable, insertTable } from './tableUtils';
+import { convertWordToMarkdown } from './wordConverter';
+import { checkImageLinks, initDiagnostics } from './imageChecker';
 import { initLogger, log, showErrorMessage } from './logger';
 
 export function activate(context: vscode.ExtensionContext): void {
     initLogger(context);
+    initDiagnostics(context);
     log('Extension "MarkInk" is now active!');
 
-    // Paste Image command
+    // === Image Commands ===
     const pasteDisposable = vscode.commands.registerCommand('markink.pasteImage', async () => {
         try {
             await paste();
@@ -18,7 +24,6 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    // Rename Image command
     const renameDisposable = vscode.commands.registerCommand('markink.renameImage', async () => {
         try {
             await renameImage();
@@ -27,7 +32,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    // Configure Settings command
+    // === Settings Commands ===
     const configureDisposable = vscode.commands.registerCommand('markink.configure', async () => {
         try {
             await configureSettings();
@@ -36,7 +41,6 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    // Show Settings command
     const showSettingsDisposable = vscode.commands.registerCommand('markink.showSettings', async () => {
         try {
             await showCurrentSettings();
@@ -45,31 +49,121 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    // Outline Tree View
+    // === Outline Tree View ===
     const outlineProvider = new MarkdownOutlineProvider();
-    const treeView = vscode.window.createTreeView('markinkOutline', {
+    const outlineTreeView = vscode.window.createTreeView('markinkOutline', {
         treeDataProvider: outlineProvider,
         showCollapseAll: true
     });
 
-    // Refresh Outline command
     const refreshOutlineDisposable = vscode.commands.registerCommand('markink.refreshOutline', () => {
-        outlineProvider.refresh();
+        try {
+            outlineProvider.refresh();
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
     });
 
-    // Go to Heading command
-    const gotoHeadingDisposable = vscode.commands.registerCommand('markink.gotoHeading', (uri: vscode.Uri, line: number) => {
-        gotoHeading(uri, line);
+    const gotoHeadingDisposable = vscode.commands.registerCommand('markink.gotoHeading', async (uri: vscode.Uri, line: number) => {
+        try {
+            await gotoHeading(uri, line);
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
     });
 
+    // === Image List Tree View ===
+    const imageListProvider = new ImageListProvider();
+    const imageTreeView = vscode.window.createTreeView('markinkImages', {
+        treeDataProvider: imageListProvider,
+        showCollapseAll: false
+    });
+
+    const gotoImageDisposable = vscode.commands.registerCommand('markink.gotoImage', async (uri: vscode.Uri, line: number) => {
+        try {
+            await gotoImage(uri, line);
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
+    });
+
+    // === Tools Panel ===
+    const toolsProvider = new ToolsPanelProvider();
+    const toolsTreeView = vscode.window.createTreeView('markinkTools', {
+        treeDataProvider: toolsProvider,
+        showCollapseAll: false
+    });
+
+    // === Table Commands ===
+    const insertTocDisposable = vscode.commands.registerCommand('markink.insertToc', async () => {
+        try {
+            await insertToc();
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
+    });
+
+    const formatTableDisposable = vscode.commands.registerCommand('markink.formatTable', async () => {
+        try {
+            await formatTable();
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
+    });
+
+    const insertTableDisposable = vscode.commands.registerCommand('markink.insertTable', async () => {
+        try {
+            await insertTable();
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
+    });
+
+    // === Word Converter ===
+    const wordToMarkdownDisposable = vscode.commands.registerCommand('markink.wordToMarkdown', async () => {
+        try {
+            await convertWordToMarkdown();
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
+    });
+
+    // === Image Checker ===
+    const checkImageLinksDisposable = vscode.commands.registerCommand('markink.checkImageLinks', async () => {
+        try {
+            await checkImageLinks();
+        } catch (e) {
+            showErrorMessage((e as Error).message);
+        }
+    });
+
+    // Register all disposables
     context.subscriptions.push(
+        // Image commands
         pasteDisposable,
         renameDisposable,
+        // Settings commands
         configureDisposable,
         showSettingsDisposable,
-        treeView,
+        // Outline (provider implements Disposable for cleanup)
+        outlineProvider,
+        outlineTreeView,
         refreshOutlineDisposable,
-        gotoHeadingDisposable
+        gotoHeadingDisposable,
+        // Image list (provider implements Disposable for cleanup)
+        imageListProvider,
+        imageTreeView,
+        gotoImageDisposable,
+        // Tools panel
+        toolsTreeView,
+        // Table commands
+        insertTocDisposable,
+        formatTableDisposable,
+        insertTableDisposable,
+        // Word converter
+        wordToMarkdownDisposable,
+        // Image checker
+        checkImageLinksDisposable
     );
 }
 

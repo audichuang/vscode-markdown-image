@@ -6,28 +6,51 @@ interface HeadingItem {
     line: number;
 }
 
-export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
+export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineItem>, vscode.Disposable {
     private _onDidChangeTreeData: vscode.EventEmitter<OutlineItem | undefined | null | void> = new vscode.EventEmitter<OutlineItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<OutlineItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private headings: HeadingItem[] = [];
     private documentUri: vscode.Uri | undefined;
+    private disposables: vscode.Disposable[] = [];
+    private refreshTimeout: NodeJS.Timeout | undefined;
 
     constructor() {
         // Listen for active editor changes
-        vscode.window.onDidChangeActiveTextEditor(() => {
-            this.refresh();
-        });
-
-        // Listen for document changes
-        vscode.workspace.onDidChangeTextDocument((e) => {
-            if (e.document === vscode.window.activeTextEditor?.document) {
+        this.disposables.push(
+            vscode.window.onDidChangeActiveTextEditor(() => {
                 this.refresh();
-            }
-        });
+            })
+        );
+
+        // Listen for document changes with debounce
+        this.disposables.push(
+            vscode.workspace.onDidChangeTextDocument((e) => {
+                if (e.document === vscode.window.activeTextEditor?.document) {
+                    this.debouncedRefresh();
+                }
+            })
+        );
 
         // Initial refresh
         this.refresh();
+    }
+
+    dispose(): void {
+        if (this.refreshTimeout) {
+            clearTimeout(this.refreshTimeout);
+        }
+        this.disposables.forEach(d => d.dispose());
+        this._onDidChangeTreeData.dispose();
+    }
+
+    private debouncedRefresh(): void {
+        if (this.refreshTimeout) {
+            clearTimeout(this.refreshTimeout);
+        }
+        this.refreshTimeout = setTimeout(() => {
+            this.refresh();
+        }, 300);
     }
 
     refresh(): void {
@@ -62,11 +85,11 @@ export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineI
 
             if (match) {
                 const level = match[1].length;
-                const text = match[2].trim();
+                const headingText = match[2].trim();
 
                 this.headings.push({
                     level,
-                    text,
+                    text: headingText,
                     line: i
                 });
             }
@@ -188,15 +211,17 @@ export class OutlineItem extends vscode.TreeItem {
     }
 }
 
-export function gotoHeading(uri: vscode.Uri, line: number): void {
-    vscode.workspace.openTextDocument(uri).then((doc) => {
-        vscode.window.showTextDocument(doc).then((editor) => {
-            const position = new vscode.Position(line, 0);
-            editor.selection = new vscode.Selection(position, position);
-            editor.revealRange(
-                new vscode.Range(position, position),
-                vscode.TextEditorRevealType.InCenter
-            );
-        });
-    });
+export async function gotoHeading(uri: vscode.Uri, line: number): Promise<void> {
+    try {
+        const doc = await vscode.workspace.openTextDocument(uri);
+        const editor = await vscode.window.showTextDocument(doc);
+        const position = new vscode.Position(line, 0);
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(
+            new vscode.Range(position, position),
+            vscode.TextEditorRevealType.InCenter
+        );
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to navigate: ${(error as Error).message}`);
+    }
 }

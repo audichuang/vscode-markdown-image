@@ -7,11 +7,12 @@
   "author": {
     "name": "audichuang"
   },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/audichuang/vscode-markdown-image.git"
   },
-  "homepage": "https://github.com/audichuang/vscode-markdown-image/blob/master/README.md",
+  "homepage": "https://github.com/audichuang/vscode-markdown-image#readme",
   "bugs": {
     "url": "https://github.com/audichuang/vscode-markdown-image/issues"
   },
@@ -26,110 +27,186 @@
     "paste",
     "outline",
     "documentation",
-    "productivity"
+    "productivity",
+    "table",
+    "toc"
   ],
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Formatters"
+  ],
+  "extensionKind": [
+    "workspace",
+    "ui"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Image paste requires file system access"
+    }
+  },
   "contributes": {
     "configuration": {
-      "type": "object",
-      "title": "MarkInk Configuration",
+      "title": "MarkInk",
       "properties": {
         "markink.imagePath": {
           "type": "string",
           "default": "${currentFileDir}",
-          "description": "The destination to save image file. You can use variables: ${currentFileDir}, ${projectRoot}, ${currentFileName}, ${currentFileNameWithoutExt}"
+          "markdownDescription": "The destination to save image file. Supported variables: `${currentFileDir}`, `${projectRoot}`, `${currentFileName}`, `${currentFileNameWithoutExt}`",
+          "order": 1
         },
         "markink.imageBasePath": {
           "type": "string",
           "default": "${currentFileDir}",
-          "description": "The base path for calculating relative image URLs. Leave empty for absolute paths."
-        },
-        "markink.forceUnixStyleSeparator": {
-          "type": "boolean",
-          "default": true,
-          "description": "Force Unix-style path separators (/) in image paths."
-        },
-        "markink.imagePrefix": {
-          "type": "string",
-          "default": "",
-          "description": "String to prepend to the image path."
-        },
-        "markink.imageSuffix": {
-          "type": "string",
-          "default": "",
-          "description": "String to append to the image path."
+          "markdownDescription": "The base path for calculating relative image URLs. Leave empty for absolute paths.",
+          "order": 2
         },
         "markink.defaultImageName": {
           "type": "string",
           "default": "YYYY-MM-DD-HH-mm-ss",
-          "description": "Default image filename format (dayjs format). See: https://day.js.org/docs/en/display/format"
+          "markdownDescription": "Default image filename format ([dayjs format](https://day.js.org/docs/en/display/format))",
+          "order": 3
+        },
+        "markink.forceUnixStyleSeparator": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Force Unix-style path separators (`/`) in image paths.",
+          "order": 4
+        },
+        "markink.imagePrefix": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "String to prepend to the image path.",
+          "order": 5
+        },
+        "markink.imageSuffix": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "String to append to the image path.",
+          "order": 6
         },
         "markink.imageNamePrefix": {
           "type": "string",
           "default": "",
-          "description": "String to prepend to the image filename."
+          "markdownDescription": "String to prepend to the image filename.",
+          "order": 7
         },
         "markink.imageNameSuffix": {
           "type": "string",
           "default": "",
-          "description": "String to append to the image filename."
+          "markdownDescription": "String to append to the image filename.",
+          "order": 8
         },
         "markink.encodePath": {
           "type": "string",
-          "enum": ["none", "urlEncode", "urlEncodeSpace"],
+          "enum": [
+            "none",
+            "urlEncode",
+            "urlEncodeSpace"
+          ],
           "default": "urlEncodeSpace",
-          "description": "How to encode the image path: none, urlEncode, or urlEncodeSpace"
+          "markdownDescription": "How to encode the image path: `none`, `urlEncode`, or `urlEncodeSpace`",
+          "order": 9
         },
         "markink.insertPattern": {
           "type": "string",
           "default": "${imageSyntaxPrefix}${imageFilePath}${imageSyntaxSuffix}",
-          "description": "Pattern for inserting image reference into document."
+          "markdownDescription": "Pattern for inserting image reference into document.",
+          "order": 10
         },
         "markink.showFilePathConfirmInputBox": {
           "type": "boolean",
           "default": false,
-          "description": "Show input box to confirm/modify file path before saving."
+          "markdownDescription": "Show input box to confirm/modify file path before saving.",
+          "order": 11
         },
         "markink.filePathConfirmInputBoxMode": {
           "type": "string",
-          "enum": ["fullPath", "onlyName"],
+          "enum": [
+            "fullPath",
+            "onlyName"
+          ],
           "default": "fullPath",
-          "description": "Mode for file path confirmation: fullPath or onlyName"
+          "markdownDescription": "Mode for file path confirmation: `fullPath` or `onlyName`",
+          "order": 12
         }
       }
     },
     "commands": [
       {
         "command": "markink.pasteImage",
-        "title": "MarkInk: Paste Image",
+        "title": "Paste Image",
+        "category": "MarkInk",
         "icon": "$(file-media)"
       },
       {
         "command": "markink.renameImage",
-        "title": "MarkInk: Rename Image at Cursor",
+        "title": "Rename Image at Cursor",
+        "category": "MarkInk",
         "icon": "$(edit)"
       },
       {
         "command": "markink.configure",
-        "title": "MarkInk: Configure Settings",
+        "title": "Configure Settings",
+        "category": "MarkInk",
         "icon": "$(gear)"
       },
       {
         "command": "markink.showSettings",
-        "title": "MarkInk: Show Current Settings",
+        "title": "Show Current Settings",
+        "category": "MarkInk",
         "icon": "$(info)"
       },
       {
         "command": "markink.refreshOutline",
-        "title": "MarkInk: Refresh Outline",
+        "title": "Refresh Outline",
+        "category": "MarkInk",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "markink.insertToc",
+        "title": "Insert Table of Contents",
+        "category": "MarkInk",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "markink.formatTable",
+        "title": "Format Table",
+        "category": "MarkInk",
+        "icon": "$(table)"
+      },
+      {
+        "command": "markink.insertTable",
+        "title": "Insert Table",
+        "category": "MarkInk",
+        "icon": "$(add)"
+      },
+      {
+        "command": "markink.wordToMarkdown",
+        "title": "Word → Markdown",
+        "category": "MarkInk",
+        "icon": "$(file-symlink-file)"
+      },
+      {
+        "command": "markink.checkImageLinks",
+        "title": "Check Image Links",
+        "category": "MarkInk",
+        "icon": "$(search)"
+      },
+      {
+        "command": "markink.gotoHeading",
+        "title": "Go to Heading",
+        "category": "MarkInk"
+      },
+      {
+        "command": "markink.gotoImage",
+        "title": "Go to Image",
+        "category": "MarkInk"
       }
     ],
     "viewsContainers": {
@@ -147,6 +224,15 @@
           "id": "markinkOutline",
           "name": "Document Outline",
           "when": "resourceLangId == markdown"
+        },
+        {
+          "id": "markinkImages",
+          "name": "Images",
+          "when": "resourceLangId == markdown"
+        },
+        {
+          "id": "markinkTools",
+          "name": "Tools"
         }
       ]
     },
@@ -156,6 +242,23 @@
           "command": "markink.refreshOutline",
           "when": "view == markinkOutline",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "markink.pasteImage",
+          "when": "editorTextFocus && resourceLangId == markdown",
+          "group": "markink@1"
+        },
+        {
+          "command": "markink.renameImage",
+          "when": "editorTextFocus && resourceLangId == markdown",
+          "group": "markink@2"
+        },
+        {
+          "command": "markink.formatTable",
+          "when": "editorTextFocus && resourceLangId == markdown",
+          "group": "markink@3"
         }
       ]
     },
@@ -171,6 +274,18 @@
         "key": "ctrl+shift+r",
         "mac": "cmd+shift+r",
         "when": "editorTextFocus && editorLangId =~ /markdown|asciidoc/"
+      },
+      {
+        "command": "markink.formatTable",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "editorTextFocus && editorLangId == markdown"
+      },
+      {
+        "command": "markink.insertToc",
+        "key": "ctrl+shift+o",
+        "mac": "cmd+shift+o",
+        "when": "editorTextFocus && editorLangId == markdown"
       }
     ]
   },
@@ -187,13 +302,21 @@
     "test": "node ./out/test/runTest.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "dayjs": "^1.11.10",
+    "jsdom": "^27.4.0",
+    "mammoth": "^1.11.0",
+    "turndown": "^7.2.2",
+    "turndown-plugin-gfm": "^1.0.2",
     "upath": "^2.0.1"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/glob": "^8.1.0",
+    "@types/jsdom": "^27.0.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.11.0",
+    "@types/turndown": "^5.0.6",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
