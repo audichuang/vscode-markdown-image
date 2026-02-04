@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="inkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4FC3F7"/>
+      <stop offset="100%" style="stop-color:#007ACC"/>
+    </linearGradient>
+    <linearGradient id="docGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF"/>
+      <stop offset="100%" style="stop-color:#F5F5F5"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#1E1E1E"/>
+
+  <!-- Document base -->
+  <rect x="20" y="14" width="70" height="90" rx="8" ry="8" fill="url(#docGradient)" filter="url(#shadow)"/>
+
+  <!-- Markdown M symbol -->
+  <path d="M32 40 L32 72 M32 40 L48 60 L64 40 M64 40 L64 72"
+        stroke="#007ACC" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Ink drop -->
+  <path d="M100 38 C100 38 116 54 116 68 C116 80 110 88 100 88 C90 88 84 80 84 68 C84 54 100 38 100 38 Z"
+        fill="url(#inkGradient)" filter="url(#shadow)"/>
+
+  <!-- Ink drop highlight -->
+  <ellipse cx="95" cy="58" rx="4" ry="6" fill="#FFFFFF" opacity="0.4"/>
+
+  <!-- Image placeholder -->
+  <rect x="28" y="80" width="24" height="18" rx="3" fill="#4FC3F7"/>
+  <circle cx="34" cy="86" r="3" fill="#FFFFFF"/>
+  <path d="M28 95 L36 89 L42 93 L48 87 L52 95" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linejoin="round"/>
+
+  <!-- Text lines -->
+  <rect x="58" y="82" width="26" height="5" rx="2" fill="#B0BEC5"/>
+  <rect x="58" y="91" width="18" height="5" rx="2" fill="#B0BEC5"/>
+</svg>

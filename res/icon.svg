@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Document outline -->
+  <path d="M4 4 L4 20 C4 21 5 22 6 22 L14 22 C15 22 16 21 16 20 L16 8 L12 4 L6 4 C5 4 4 5 4 6"/>
+
+  <!-- Document fold -->
+  <path d="M12 4 L12 8 L16 8"/>
+
+  <!-- Markdown M symbol -->
+  <path d="M6.5 12 L6.5 17 M6.5 12 L9 15.5 L11.5 12 M11.5 12 L11.5 17"/>
+
+  <!-- Ink drop -->
+  <path d="M19 10 C19 10 21 12.5 21 14 C21 15.5 20.2 16.5 19 16.5 C17.8 16.5 17 15.5 17 14 C17 12.5 19 10 19 10 Z"/>
+</svg>

@@ -1,0 +1,11 @@
+out
+dist
+node_modules
+.vscode-test
+npm-debug.log*
+*.vsix
+.DS_Store
+.idea
+word2md-main
+src/test/fixtures
+src/test/testV3Convert.ts
