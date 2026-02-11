@@ -21,13 +21,12 @@ npm run package          # Build and create .vsix package
 ## Testing
 
 Tests use VS Code's extension testing framework (Mocha-based) with `@vscode/test-electron`.
-- `npm run test` - Run all tests
 - Test files: `src/test/suite/*.test.ts`
 - Test fixtures: `src/test/fixtures/` (gitignored)
 
 ## Architecture
 
-MarkInk is a VS Code extension providing Markdown productivity tools: image pasting, Word-to-Markdown conversion, outline navigation, and table formatting.
+MarkInk is a VS Code extension providing Markdown productivity tools: image pasting, Word-to-Markdown conversion, export, outline navigation, and table formatting.
 
 ### Entry Points
 - **`src/extension.ts`** - Registers all commands and initializes views
@@ -39,16 +38,21 @@ MarkInk is a VS Code extension providing Markdown productivity tools: image past
 | Feature | Main File | Description |
 |---------|-----------|-------------|
 | Paste Image | `src/paster.ts` | Clipboard image extraction and insertion |
-| Word → Markdown | `src/wordConverter.ts` | DOCX conversion with mammoth + turndown |
+| Word → Markdown | `src/word/converter.ts` | DOCX conversion with mammoth + turndown |
+| Export | `src/exporter.ts` | Markdown to HTML/Word export |
 | Image Checker | `src/imageChecker.ts` | Validates image links in documents |
+| Rename Image | `src/renameImage.ts` | Rename images and update references |
 | Outline | `src/outline.ts` | Document structure tree view |
+| Image List | `src/imageList.ts` | Images panel in sidebar |
 | Table Tools | `src/tableUtils.ts` | Table formatting and insertion |
+| Tools Panel | `src/toolsPanel.ts` | Sidebar tools UI |
+| Config UI | `src/configUI.ts` | Settings configuration interface |
 
 ### Word Converter Architecture
 
 Two parallel implementations exist:
-- **`src/wordConverter.ts`** - VS Code integration (depends on `vscode` module)
-- **`src/wordConverterCore.ts`** - Standalone core logic (for testing without VS Code)
+- **`src/word/converter.ts`** - VS Code integration (depends on `vscode` module)
+- **`src/word/converterCore.ts`** - Standalone core logic (for testing without VS Code)
 
 Key conversion flow:
 1. `mammoth` converts DOCX → HTML with image extraction
@@ -69,10 +73,12 @@ Clipboard image extraction is platform-specific:
 external: ['vscode', 'jsdom', 'canvas', 'bufferutil', 'utf-8-validate']
 ```
 
-### Dependencies
+### Key Dependencies
 - `mammoth` - DOCX to HTML conversion
 - `turndown` + `turndown-plugin-gfm` - HTML to Markdown conversion
 - `jsdom` - DOM parsing for table analysis
+- `markdown-it` - Markdown to HTML rendering (for export)
+- `md-to-docx` - Markdown to Word export
 - `dayjs` - Timestamp formatting for image filenames
 - `upath` - Cross-platform path normalization
 
@@ -83,3 +89,7 @@ Configuration and insert patterns support variables:
 - `${imageFilePath}`, `${imageSyntaxPrefix}`, `${imageSyntaxSuffix}`
 
 Variables are resolved in `src/pathVariables.ts`.
+
+### Configuration Namespace
+
+Settings use `markink.*` namespace (e.g., `markink.imagePath`, `markink.insertPattern`). Legacy `pasteImage.*` settings are also supported for backwards compatibility.
