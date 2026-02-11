@@ -1,0 +1,10 @@
+.github/**
+src/**
+out/**
+.gitignore
+.eslintrc*
+tsconfig.json
+esbuild.js
+**/*.ts
+**/*.map
+CLAUDE.md
