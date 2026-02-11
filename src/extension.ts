@@ -10,12 +10,20 @@ import { exportMarkdown } from './exporter';
 import { convertWordToMarkdown } from './word';
 import { checkImageLinks, initDiagnostics, initReportProvider } from './imageChecker';
 import { initLogger, log, showErrorMessage } from './logger';
+import { migrateLegacySettings } from './config';
 
 export function activate(context: vscode.ExtensionContext): void {
     initLogger(context);
     initDiagnostics(context);
     initReportProvider(context);
     log('Extension "MarkInk" is now active!');
+    void migrateLegacySettings().then((migratedCount) => {
+        if (migratedCount > 0) {
+            log(`Migrated ${migratedCount} legacy pasteImage.* settings to markink.*`);
+        }
+    }).catch((e) => {
+        log(`Failed to migrate legacy settings: ${(e as Error).message}`);
+    });
 
     // === Image Commands ===
     const pasteDisposable = vscode.commands.registerCommand('markink.pasteImage', async () => {
@@ -130,9 +138,9 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     // === Word Converter ===
-    const wordToMarkdownDisposable = vscode.commands.registerCommand('markink.wordToMarkdown', async () => {
+    const wordToMarkdownDisposable = vscode.commands.registerCommand('markink.wordToMarkdown', async (uri?: vscode.Uri, selectedUris?: vscode.Uri[]) => {
         try {
-            await convertWordToMarkdown();
+            await convertWordToMarkdown(uri, selectedUris);
         } catch (e) {
             showErrorMessage((e as Error).message);
         }
@@ -148,9 +156,9 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     // === Export Commands ===
-    const exportMarkdownDisposable = vscode.commands.registerCommand('markink.exportMarkdown', async () => {
+    const exportMarkdownDisposable = vscode.commands.registerCommand('markink.exportMarkdown', async (uri?: vscode.Uri, selectedUris?: vscode.Uri[]) => {
         try {
-            await exportMarkdown();
+            await exportMarkdown(uri, selectedUris);
         } catch (e) {
             showErrorMessage((e as Error).message);
         }

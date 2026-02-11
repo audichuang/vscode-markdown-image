@@ -1,16 +1,16 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import * as logger from './logger';
 
 interface ImageReference {
     match: string;
     imagePath: string;
+    titleSuffix?: string;
     range: vscode.Range;
     fullPath: string;
 }
 
-const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)\n]*?)(?:\s+(".*?"|'.*?'|\(.*?\)))?\)/g;
 const ASCIIDOC_IMAGE_PATTERN = /image::([^[]+)\[/g;
 
 function findImageAtCursor(document: vscode.TextDocument, position: vscode.Position): ImageReference | undefined {
@@ -27,11 +27,16 @@ function findImageAtCursor(document: vscode.TextDocument, position: vscode.Posit
         const endChar = match.index + match[0].length;
 
         if (position.character >= startChar && position.character <= endChar) {
-            const imagePath = languageId === 'asciidoc' ? match[1] : match[2];
+            const imagePath = languageId === 'asciidoc' ? match[1] : match[2].trim();
+            const titleSuffix = languageId === 'asciidoc' ? undefined : match[3];
             const documentDir = path.dirname(document.uri.fsPath);
 
-            // Decode URL-encoded path
-            const decodedPath = decodeURIComponent(imagePath);
+            let decodedPath: string;
+            try {
+                decodedPath = decodeURIComponent(imagePath);
+            } catch {
+                decodedPath = imagePath;
+            }
             const fullPath = path.isAbsolute(decodedPath)
                 ? decodedPath
                 : path.resolve(documentDir, decodedPath);
@@ -43,6 +48,7 @@ function findImageAtCursor(document: vscode.TextDocument, position: vscode.Posit
                     new vscode.Position(position.line, startChar),
                     new vscode.Position(position.line, endChar)
                 ),
+                titleSuffix,
                 fullPath: fullPath
             };
         }
@@ -54,7 +60,8 @@ function findImageAtCursor(document: vscode.TextDocument, position: vscode.Posit
 function buildNewImageSyntax(
     languageId: string,
     oldMatch: string,
-    newRelativePath: string
+    newRelativePath: string,
+    titleSuffix?: string
 ): string {
     if (languageId === 'asciidoc') {
         // Extract attributes from old match: image::path[attrs]
@@ -65,7 +72,8 @@ function buildNewImageSyntax(
         // Extract alt text from old match: ![alt](path)
         const altMatch = oldMatch.match(/!\[([^\]]*)\]/);
         const altText = altMatch ? altMatch[1] : '';
-        return `![${altText}](${newRelativePath})`;
+        const suffix = titleSuffix ? ` ${titleSuffix}` : '';
+        return `![${altText}](${newRelativePath}${suffix})`;
     }
 }
 
@@ -87,7 +95,10 @@ export async function renameImage(): Promise<void> {
     }
 
     // Check if file exists
-    if (!fs.existsSync(imageRef.fullPath)) {
+    const oldUri = vscode.Uri.file(imageRef.fullPath);
+    try {
+        await vscode.workspace.fs.stat(oldUri);
+    } catch {
         logger.showErrorMessage(`Image file not found: ${imageRef.fullPath}`);
         return;
     }
@@ -125,7 +136,16 @@ export async function renameImage(): Promise<void> {
     const newFullPath = path.join(oldDir, finalNewFileName);
 
     // Check if new file already exists
-    if (fs.existsSync(newFullPath)) {
+    const newUri = vscode.Uri.file(newFullPath);
+    let newFileExists = false;
+    try {
+        await vscode.workspace.fs.stat(newUri);
+        newFileExists = true;
+    } catch {
+        newFileExists = false;
+    }
+
+    if (newFileExists) {
         const choice = await logger.showInformationMessage(
             `File "${finalNewFileName}" already exists. Overwrite?`,
             'Overwrite',
@@ -138,7 +158,7 @@ export async function renameImage(): Promise<void> {
 
     try {
         // Rename the actual file
-        await fs.promises.rename(imageRef.fullPath, newFullPath);
+        await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: newFileExists });
 
         // Calculate new relative path
         const documentDir = path.dirname(document.uri.fsPath);
@@ -154,7 +174,8 @@ export async function renameImage(): Promise<void> {
         const newImageSyntax = buildNewImageSyntax(
             document.languageId,
             imageRef.match,
-            newRelativePath
+            newRelativePath,
+            imageRef.titleSuffix
         );
 
         // Update the document

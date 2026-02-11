@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 let outputChannel: vscode.OutputChannel | undefined;
 
 export function initLogger(context: vscode.ExtensionContext): void {
-    outputChannel = vscode.window.createOutputChannel('PasteImage');
+    outputChannel = vscode.window.createOutputChannel('MarkInk');
     context.subscriptions.push(outputChannel);
 }
 

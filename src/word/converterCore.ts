@@ -7,8 +7,20 @@ import * as fs from 'fs';
 import * as mammoth from 'mammoth';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import { JSDOM } from 'jsdom';
 import { ConversionResult } from './types';
+import { sanitizeFileName } from '../sanitize';
+
+// linkedom is ESM-only; use dynamic import with manual types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ParseHTMLFn = (html: string) => any;
+let _parseHTML: ParseHTMLFn | undefined;
+async function getParseHTML(): Promise<ParseHTMLFn> {
+    if (!_parseHTML) {
+        const mod = await import('linkedom');
+        _parseHTML = mod.parseHTML as ParseHTMLFn;
+    }
+    return _parseHTML!;
+}
 
 export async function convertDocxToMarkdown(
     docxPath: string,
@@ -40,7 +52,8 @@ export async function convertDocxToMarkdown(
                     const imgExt = extMap[contentType] || '.png';
 
                     imageIndex++;
-                    const newName = `${baseName}-image-${String(imageIndex).padStart(3, '0')}${imgExt}`;
+                    const safeName = sanitizeFileName(baseName);
+                    const newName = `${safeName}-image-${String(imageIndex).padStart(3, '0')}${imgExt}`;
                     const imgPath = path.join(imagesDir, newName);
 
                     fs.writeFileSync(imgPath, imageBuffer);
@@ -58,7 +71,8 @@ export async function convertDocxToMarkdown(
     }
 
     // 預處理：標記複雜表格
-    const preprocessedHtml = preprocessComplexTables(result.value);
+    const parseHTML = await getParseHTML();
+    const preprocessedHtml = preprocessComplexTables(parseHTML, result.value);
 
     const turndownService = new TurndownService({
         headingStyle: 'atx',
@@ -77,7 +91,7 @@ export async function convertDocxToMarkdown(
             return node.nodeName.toLowerCase() === 'complex-table';
         },
         replacement: function(_content, node) {
-            const originalHtml = (node as Element).getAttribute('data-html') || '';
+            const originalHtml = (node as unknown as { getAttribute(name: string): string | null }).getAttribute('data-html') || '';
             return '\n\n' + originalHtml + '\n\n';
         }
     });
@@ -87,7 +101,7 @@ export async function convertDocxToMarkdown(
         filter: 'table',
         replacement: function(_content, node) {
             const tableHtml = (node as unknown as { outerHTML?: string }).outerHTML || '';
-            return convertSimpleTableToMarkdown(tableHtml, turndownService);
+            return convertSimpleTableToMarkdown(parseHTML, tableHtml, turndownService);
         }
     });
 
@@ -100,34 +114,38 @@ export async function convertDocxToMarkdown(
     };
 }
 
-function preprocessComplexTables(html: string): string {
-    const dom = new JSDOM(html);
-    try {
-        const doc = dom.window.document;
-        const allTables = doc.querySelectorAll('table');
+function preprocessComplexTables(parseHTML: ParseHTMLFn, html: string): string {
+    const { document: doc } = parseHTML(`<body>${html}</body>`);
+    const allTables = doc.querySelectorAll('table');
 
-        for (const table of allTables) {
-            if (table.parentElement?.closest('table')) continue;
-
-            if (isComplexTable(table)) {
-                // 使用自定義標籤，Turndown 才能正確識別
-                const wrapper = doc.createElement('complex-table');
-                wrapper.setAttribute('data-html', table.outerHTML);
-                wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
-                table.parentNode?.replaceChild(wrapper, table);
-            }
+    for (const table of allTables) {
+        if (table.parentElement?.closest('table')) {
+            continue;
         }
 
-        return doc.body.innerHTML;
-    } finally {
-        dom.window.close();
+        if (isComplexTable(table)) {
+            // 使用自定義標籤，Turndown 才能正確識別
+            const wrapper = doc.createElement('complex-table');
+            wrapper.setAttribute('data-html', table.outerHTML);
+            wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
+            table.parentNode?.replaceChild(wrapper, table);
+        }
     }
+
+    return doc.body.innerHTML;
 }
 
-function isComplexTable(table: Element): boolean {
-    if (table.querySelectorAll('img').length > 0) return true;
-    if (table.querySelectorAll('ul, ol').length > 0) return true;
-    if (table.querySelectorAll('table').length > 0) return true;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isComplexTable(table: any): boolean {
+    if (table.querySelectorAll('img').length > 0) {
+        return true;
+    }
+    if (table.querySelectorAll('ul, ol').length > 0) {
+        return true;
+    }
+    if (table.querySelectorAll('table').length > 0) {
+        return true;
+    }
 
     const cells = table.querySelectorAll('td, th');
     for (const cell of cells) {
@@ -142,63 +160,62 @@ function isComplexTable(table: Element): boolean {
     return false;
 }
 
-function convertSimpleTableToMarkdown(tableHtml: string, turndownService: TurndownService): string {
-    const dom = new JSDOM(tableHtml);
-    try {
-        const doc = dom.window.document;
-        const table = doc.querySelector('table');
+function convertSimpleTableToMarkdown(parseHTML: ParseHTMLFn, tableHtml: string, turndownService: TurndownService): string {
+    const { document: doc } = parseHTML(`<body>${tableHtml}</body>`);
+    const table = doc.querySelector('table');
 
-        if (!table) return '';
-
-        const rows: string[][] = [];
-        const tableRows = table.querySelectorAll('tr');
-
-        for (const tr of tableRows) {
-            const cells: string[] = [];
-            const tableCells = tr.querySelectorAll('td, th');
-
-            for (const cell of tableCells) {
-                let md = turndownService.turndown(cell.innerHTML);
-                md = md.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
-                cells.push(md);
-            }
-
-            if (cells.length > 0) {
-                rows.push(cells);
-            }
-        }
-
-        if (rows.length === 0) return '';
-
-        const colCount = Math.max(...rows.map(r => r.length));
-        const colWidths: number[] = Array(colCount).fill(3);
-
-        for (const row of rows) {
-            for (let i = 0; i < row.length; i++) {
-                colWidths[i] = Math.max(colWidths[i], row[i].length);
-            }
-        }
-
-        const lines: string[] = [];
-        const header = rows[0] || [];
-        const headerCells = [];
-        for (let i = 0; i < colCount; i++) {
-            headerCells.push((header[i] || '').padEnd(colWidths[i]));
-        }
-        lines.push('| ' + headerCells.join(' | ') + ' |');
-        lines.push('| ' + colWidths.map(w => '-'.repeat(w)).join(' | ') + ' |');
-
-        for (let r = 1; r < rows.length; r++) {
-            const row = rows[r];
-            const cells = [];
-            for (let i = 0; i < colCount; i++) {
-                cells.push((row[i] || '').padEnd(colWidths[i]));
-            }
-            lines.push('| ' + cells.join(' | ') + ' |');
-        }
-
-        return '\n' + lines.join('\n') + '\n';
-    } finally {
-        dom.window.close();
+    if (!table) {
+        return '';
     }
+
+    const rows: string[][] = [];
+    const tableRows = table.querySelectorAll('tr');
+
+    for (const tr of tableRows) {
+        const cells: string[] = [];
+        const tableCells = tr.querySelectorAll('td, th');
+
+        for (const cell of tableCells) {
+            let md = turndownService.turndown(cell.innerHTML);
+            md = md.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+            cells.push(md);
+        }
+
+        if (cells.length > 0) {
+            rows.push(cells);
+        }
+    }
+
+    if (rows.length === 0) {
+        return '';
+    }
+
+    const colCount = Math.max(...rows.map(r => r.length));
+    const colWidths: number[] = Array(colCount).fill(3);
+
+    for (const row of rows) {
+        for (let i = 0; i < row.length; i++) {
+            colWidths[i] = Math.max(colWidths[i], row[i].length);
+        }
+    }
+
+    const lines: string[] = [];
+    const header = rows[0] || [];
+    const headerCells = [];
+    for (let i = 0; i < colCount; i++) {
+        headerCells.push((header[i] || '').padEnd(colWidths[i]));
+    }
+    lines.push('| ' + headerCells.join(' | ') + ' |');
+    lines.push('| ' + colWidths.map(w => '-'.repeat(w)).join(' | ') + ' |');
+
+    for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const cells = [];
+        for (let i = 0; i < colCount; i++) {
+            cells.push((row[i] || '').padEnd(colWidths[i]));
+        }
+        lines.push('| ' + cells.join(' | ') + ' |');
+    }
+
+    return '\n' + lines.join('\n') + '\n';
 }

@@ -1,5 +1,4 @@
 import * as path from 'path';
-import upath from 'upath';
 
 const PATH_VARIABLE_PATTERNS = {
     currentFileDir: /\$\{currentFileDir\}/g,
@@ -54,7 +53,7 @@ export function renderFilePath(options: RenderOptions): string {
     }
 
     if (forceUnixStyleSeparator) {
-        imageFilePath = upath.normalize(imageFilePath);
+        imageFilePath = path.normalize(imageFilePath).replace(/\\/g, '/');
     }
 
     const originalImagePath = imageFilePath;

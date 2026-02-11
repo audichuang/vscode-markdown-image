@@ -1,125 +1,45 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { MarkdownDocumentTracker } from './markdownDocumentTracker';
+import { parseMarkdownImages } from './markdownImageParser';
 
-interface ImageItem {
-    path: string;
-    relativePath: string;
-    line: number;
-    column: number;
-    altText: string;
-}
-
-export class ImageListProvider implements vscode.TreeDataProvider<ImageTreeItem>, vscode.Disposable {
-    private _onDidChangeTreeData: vscode.EventEmitter<ImageTreeItem | undefined | null | void> = new vscode.EventEmitter<ImageTreeItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<ImageTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
-
-    private images: ImageItem[] = [];
-    private documentUri: vscode.Uri | undefined;
-    private disposables: vscode.Disposable[] = [];
-    private refreshTimeout: NodeJS.Timeout | undefined;
+export class ImageListProvider extends MarkdownDocumentTracker<ImageTreeItem> {
+    private images: ReturnType<typeof parseMarkdownImages> = [];
 
     constructor() {
-        this.disposables.push(
-            vscode.window.onDidChangeActiveTextEditor(() => {
-                this.refresh();
-            })
-        );
-
-        this.disposables.push(
-            vscode.workspace.onDidChangeTextDocument((e) => {
-                if (e.document === vscode.window.activeTextEditor?.document) {
-                    this.debouncedRefresh();
-                }
-            })
-        );
-
+        super();
         this.refresh();
     }
 
-    dispose(): void {
-        if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
-        }
-        this.disposables.forEach(d => d.dispose());
-        this._onDidChangeTreeData.dispose();
-    }
-
-    private debouncedRefresh(): void {
-        if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
-        }
-        this.refreshTimeout = setTimeout(() => {
-            this.refresh();
-        }, 300);
+    protected onDocumentClosed(): void {
+        this.images = [];
+        this.documentUri = undefined;
+        this._onDidChangeTreeData.fire();
     }
 
     refresh(): void {
         this.parseDocument();
-        this._onDidChangeTreeData.fire();
     }
 
     private parseDocument(): void {
-        this.images = [];
-        this.documentUri = undefined;
-
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            return;
-        }
-
-        const document = editor.document;
-        if (document.languageId !== 'markdown') {
+        const document = this.getTargetMarkdownDocument();
+        if (!document) {
+            if (!this.documentUri) {
+                this.images = [];
+                this._onDidChangeTreeData.fire();
+            }
             return;
         }
 
         this.documentUri = document.uri;
-        const text = document.getText();
-        const lines = text.split(/\r?\n/);
 
-        // 改進的正則表達式：處理帶有 title 的圖片語法
-        const markdownImageRegex = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-        const documentDir = path.dirname(document.uri.fsPath);
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            let match: RegExpExecArray | null;
-
-            // 重置 lastIndex
-            markdownImageRegex.lastIndex = 0;
-
-            while ((match = markdownImageRegex.exec(line)) !== null) {
-                const altText = match[1];
-                let imagePath = match[2];
-
-                // 移除 query string 和 fragment
-                imagePath = imagePath.split('?')[0].split('#')[0];
-
-                // Skip URLs
-                if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
-                    continue;
-                }
-
-                // Decode URL-encoded path with error handling
-                let decodedPath: string;
-                try {
-                    decodedPath = decodeURIComponent(imagePath);
-                } catch {
-                    decodedPath = imagePath;
-                }
-
-                const fullPath = path.isAbsolute(decodedPath)
-                    ? decodedPath
-                    : path.resolve(documentDir, decodedPath);
-
-                this.images.push({
-                    path: fullPath,
-                    relativePath: imagePath,
-                    line: i,
-                    column: match.index,
-                    altText: altText
-                });
-            }
+        try {
+            this.images = parseMarkdownImages(document.getText(), document.uri.fsPath);
+        } catch {
+            this.images = [];
+        } finally {
+            this._onDidChangeTreeData.fire();
         }
     }
 
@@ -138,24 +58,31 @@ export class ImageListProvider implements vscode.TreeDataProvider<ImageTreeItem>
     }
 }
 
+interface ImageItemInfo {
+    fullPath: string;
+    imagePath: string;
+    altText: string;
+    line: number;
+}
+
 export class ImageTreeItem extends vscode.TreeItem {
     constructor(
-        public readonly imageInfo: ImageItem,
+        public readonly imageInfo: ImageItemInfo,
         public readonly documentUri: vscode.Uri
     ) {
-        const fileName = path.basename(imageInfo.path);
+        const fileName = path.basename(imageInfo.fullPath);
         super(fileName, vscode.TreeItemCollapsibleState.None);
 
         // Check if file exists
         let exists = false;
         try {
-            exists = fs.existsSync(imageInfo.path);
+            exists = fs.existsSync(imageInfo.fullPath);
         } catch {
             exists = false;
         }
 
         this.description = imageInfo.altText || 'No alt text';
-        this.tooltip = `${imageInfo.relativePath}\nLine ${imageInfo.line + 1}${exists ? '' : ' (File not found)'}`;
+        this.tooltip = `${imageInfo.imagePath}\nLine ${imageInfo.line + 1}${exists ? '' : ' (File not found)'}`;
 
         this.iconPath = exists
             ? new vscode.ThemeIcon('file-media')
@@ -174,7 +101,34 @@ export class ImageTreeItem extends vscode.TreeItem {
 export async function gotoImage(uri: vscode.Uri, line: number): Promise<void> {
     try {
         const doc = await vscode.workspace.openTextDocument(uri);
-        const editor = await vscode.window.showTextDocument(doc);
+        const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+        const previewActive = !!activeTab && (
+            (activeTab.input instanceof vscode.TabInputCustom &&
+                activeTab.input.viewType === 'vscode.markdown.preview.editor') ||
+            (activeTab.input instanceof vscode.TabInputWebview &&
+                activeTab.input.viewType === 'markdown.preview')
+        );
+
+        let sourceColumn: vscode.ViewColumn | undefined;
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                if (
+                    tab.input instanceof vscode.TabInputText &&
+                    tab.input.uri.toString() === uri.toString()
+                ) {
+                    sourceColumn = group.viewColumn;
+                    break;
+                }
+            }
+            if (sourceColumn !== undefined) {
+                break;
+            }
+        }
+
+        const editor = await vscode.window.showTextDocument(doc, {
+            viewColumn: sourceColumn ?? (previewActive ? vscode.ViewColumn.Beside : undefined),
+            preserveFocus: previewActive
+        });
         const position = new vscode.Position(line, 0);
         editor.selection = new vscode.Selection(position, position);
         editor.revealRange(

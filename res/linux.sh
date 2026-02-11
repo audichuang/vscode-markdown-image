@@ -1,14 +1,26 @@
 #!/bin/sh
 
-# require xclip(see http://stackoverflow.com/questions/592620/check-if-a-program-exists-from-a-bash-script/677212#677212)
-command -v xclip >/dev/null 2>&1 || { echo >&1 "no xclip"; exit 1; }
+# Try clipboard tools in order of preference:
+# 1. wl-paste (Wayland)
+# 2. xclip (X11)
 
-# write image in clipboard to file (see http://unix.stackexchange.com/questions/145131/copy-image-from-clipboard-to-file)
-if
-xclip -selection clipboard -target image/png -o >/dev/null 2>&1
-then
-xclip -selection clipboard -target image/png -o >$1 2>/dev/null
-echo $1
+if command -v wl-paste >/dev/null 2>&1; then
+    # Wayland: use wl-paste
+    if wl-paste --list-types 2>/dev/null | grep -q image/png; then
+        wl-paste --type image/png > "$1" 2>/dev/null
+        echo "$1"
+    else
+        echo "no image"
+    fi
+elif command -v xclip >/dev/null 2>&1; then
+    # X11: use xclip
+    if xclip -selection clipboard -target image/png -o >/dev/null 2>&1; then
+        xclip -selection clipboard -target image/png -o > "$1" 2>/dev/null
+        echo "$1"
+    else
+        echo "no image"
+    fi
 else
-echo "no image"
+    echo "no clipboard tool" >&2
+    exit 1
 fi

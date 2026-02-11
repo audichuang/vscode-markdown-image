@@ -7,11 +7,11 @@ $img = [Windows.Clipboard]::GetImage()
 
 if ($img -eq $null) {
     "no image"
-    Exit 1
+    Exit 0
 }
 
 if (-not $imagePath) {
-    "no image"
+    "invalid image path" | Write-Error
     Exit 1
 }
 

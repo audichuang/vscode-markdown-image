@@ -10,11 +10,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/audichuang/vscode-markdown-image.git"
+    "url": "https://github.com/audichuang/vscode-paste-image.git"
   },
-  "homepage": "https://github.com/audichuang/vscode-markdown-image#readme",
+  "homepage": "https://github.com/audichuang/vscode-paste-image#readme",
   "bugs": {
-    "url": "https://github.com/audichuang/vscode-markdown-image/issues"
+    "url": "https://github.com/audichuang/vscode-paste-image/issues"
   },
   "icon": "res/icon.png",
   "galleryBanner": {
@@ -43,7 +43,10 @@
     "ui"
   ],
   "activationEvents": [
-    "onLanguage:markdown"
+    "onLanguage:markdown",
+    "onLanguage:asciidoc",
+    "onCommand:markink.wordToMarkdown",
+    "onCommand:markink.exportMarkdown"
   ],
   "main": "./dist/extension.js",
   "capabilities": {
@@ -208,7 +211,7 @@
       },
       {
         "command": "markink.exportMarkdown",
-        "title": "Export Markdown to HTML/PDF",
+        "title": "Export Markdown to HTML/Word",
         "category": "MarkInk",
         "icon": "$(export)"
       },
@@ -236,13 +239,11 @@
       "markink": [
         {
           "id": "markinkOutline",
-          "name": "Document Outline",
-          "when": "resourceLangId == markdown"
+          "name": "Document Outline"
         },
         {
           "id": "markinkImages",
-          "name": "Images",
-          "when": "resourceLangId == markdown"
+          "name": "Images"
         },
         {
           "id": "markinkTools",
@@ -260,9 +261,14 @@
       ],
       "explorer/context": [
         {
-          "command": "markink.exportMarkdown",
-          "when": "resourceLangId == markdown",
+          "command": "markink.wordToMarkdown",
+          "when": "resourceExtname == .docx",
           "group": "markink@1"
+        },
+        {
+          "command": "markink.exportMarkdown",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "markink@2"
         }
       ],
       "editor/context": [
@@ -323,28 +329,20 @@
     "test": "node ./out/test/runTest.js"
   },
   "dependencies": {
-    "@types/html-docx-js": "^0.3.4",
-    "@types/html-to-docx": "^1.8.0",
-    "@types/markdown-it": "^14.1.2",
-    "adm-zip": "^0.5.16",
     "dayjs": "^1.11.10",
-    "html-docx-js": "^0.3.1",
-    "html-to-docx": "^1.8.0",
-    "jsdom": "^27.4.0",
+    "linkedom": "^0.18.12",
     "mammoth": "^1.11.0",
     "markdown-it": "^14.1.0",
     "md-to-docx": "^1.6.1",
-    "remark": "^15.0.1",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "turndown": "^7.2.2",
     "turndown-plugin-gfm": "^1.0.2",
-    "upath": "^2.0.1"
+    "unified": "^11.0.0"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
     "@types/glob": "^8.1.0",
-    "@types/jsdom": "^27.0.0",
+    "@types/markdown-it": "^14.1.2",
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.11.0",
     "@types/turndown": "^5.0.6",

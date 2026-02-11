@@ -29,31 +29,35 @@ Search for `MarkInk` in the VS Code Extensions Marketplace, or install from [VS 
 3. Type: "Paste Image" or use shortcut: `Ctrl+Alt+V` (`Cmd+Alt+V` on Mac)
 4. Image will be saved and the Markdown link inserted
 
+Linux note: install at least one clipboard tool, `wl-paste` (Wayland) or `xclip` (X11).
+
 ![confirm-inputbox](res/confirm-inputbox.png)
 
 ### Word to Markdown
 
 1. Right-click on a `.docx` file in the Explorer
-2. Select "Convert Word to Markdown"
+2. Select "Word → Markdown"
 3. Images are automatically extracted and saved
 
 ### Export Markdown
 
 1. Right-click on a `.md` file in the Explorer
 2. Select "Export Markdown"
-3. Choose output format (HTML or Word)
+3. Choose output format (HTML or Word (.docx))
 
 ## Configuration
+
+> Legacy compatibility: old `pasteImage.*` settings are still read and are auto-migrated to `markink.*`.
 
 ### Image Path Settings
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `pasteImage.path` | Destination folder for images | `${currentFileDir}` |
-| `pasteImage.basePath` | Base path for image URLs | `${currentFileDir}` |
-| `pasteImage.defaultName` | Default image filename pattern | `Y-MM-DD-HH-mm-ss` |
-| `pasteImage.namePrefix` | Prefix for image filename | `""` |
-| `pasteImage.nameSuffix` | Suffix for image filename | `""` |
+| `markink.imagePath` | Destination folder for images | `${currentFileDir}` |
+| `markink.imageBasePath` | Base path for image URLs | `${currentFileDir}` |
+| `markink.defaultImageName` | Default image filename pattern | `YYYY-MM-DD-HH-mm-ss` |
+| `markink.imageNamePrefix` | Prefix for image filename | `""` |
+| `markink.imageNameSuffix` | Suffix for image filename | `""` |
 
 ### Path Variables
 
@@ -68,9 +72,9 @@ You can use these variables in path settings:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `pasteImage.insertPattern` | Pattern for inserted text | `${imageSyntaxPrefix}${imageFilePath}${imageSyntaxSuffix}` |
-| `pasteImage.prefix` | Prepend to image path | `""` |
-| `pasteImage.suffix` | Append to image path | `""` |
+| `markink.insertPattern` | Pattern for inserted text | `${imageSyntaxPrefix}${imageFilePath}${imageSyntaxSuffix}` |
+| `markink.imagePrefix` | Prepend to image path | `""` |
+| `markink.imageSuffix` | Append to image path | `""` |
 
 Insert pattern variables:
 
@@ -84,10 +88,10 @@ Insert pattern variables:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `pasteImage.showFilePathConfirmInputBox` | Show input box to confirm/edit path | `false` |
-| `pasteImage.filePathConfirmInputBoxMode` | `fullPath` or `onlyName` | `fullPath` |
-| `pasteImage.encodePath` | URL encoding: `none`, `urlEncode`, `urlEncodeSpace` | `urlEncodeSpace` |
-| `pasteImage.forceUnixStyleSeparator` | Use `/` separator on all platforms | `true` |
+| `markink.showFilePathConfirmInputBox` | Show input box to confirm/edit path | `false` |
+| `markink.filePathConfirmInputBoxMode` | `fullPath` or `onlyName` | `fullPath` |
+| `markink.encodePath` | URL encoding: `none`, `urlEncode`, `urlEncodeSpace` | `urlEncodeSpace` |
+| `markink.forceUnixStyleSeparator` | Use `/` separator on all platforms | `true` |
 
 ## Configuration Examples
 
@@ -95,9 +99,9 @@ Insert pattern variables:
 
 ```json
 {
-  "pasteImage.path": "${projectRoot}/source/img",
-  "pasteImage.basePath": "${projectRoot}/source",
-  "pasteImage.prefix": "/"
+  "markink.imagePath": "${projectRoot}/source/img",
+  "markink.imageBasePath": "${projectRoot}/source",
+  "markink.imagePrefix": "/"
 }
 ```
 
@@ -105,8 +109,8 @@ Insert pattern variables:
 
 ```json
 {
-  "pasteImage.path": "${currentFileDir}/images",
-  "pasteImage.basePath": "${currentFileDir}"
+  "markink.imagePath": "${currentFileDir}/images",
+  "markink.imageBasePath": "${currentFileDir}"
 }
 ```
 
@@ -114,7 +118,7 @@ Insert pattern variables:
 
 ```json
 {
-  "pasteImage.namePrefix": "${currentFileNameWithoutExt}_"
+  "markink.imageNamePrefix": "${currentFileNameWithoutExt}_"
 }
 ```
 
@@ -123,7 +127,7 @@ Insert pattern variables:
 | Command | Description |
 |---------|-------------|
 | `Paste Image` | Paste image from clipboard |
-| `Convert Word to Markdown` | Convert .docx to .md |
+| `Word → Markdown` | Convert .docx to .md |
 | `Export Markdown` | Export to HTML/Word |
 | `Check Image Links` | Validate image references |
 | `Rename Image` | Rename image and update links |
@@ -142,4 +146,4 @@ Insert pattern variables:
 
 ## Contributing
 
-Issues and pull requests are welcome at [GitHub](https://github.com/audichuang/vscode-markdown-image).
+Issues and pull requests are welcome at [GitHub](https://github.com/audichuang/vscode-paste-image).

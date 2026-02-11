@@ -1,67 +1,34 @@
 import * as vscode from 'vscode';
+import { MarkdownDocumentTracker } from './markdownDocumentTracker';
 
-export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineItem>, vscode.Disposable {
-    private _onDidChangeTreeData: vscode.EventEmitter<OutlineItem | undefined | null | void> = new vscode.EventEmitter<OutlineItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<OutlineItem | undefined | null | void> = this._onDidChangeTreeData.event;
-
+export class MarkdownOutlineProvider extends MarkdownDocumentTracker<OutlineItem> {
     private items: OutlineItem[] = [];
-    private documentUri: vscode.Uri | undefined;
-    private disposables: vscode.Disposable[] = [];
-    private refreshTimeout: NodeJS.Timeout | undefined;
+    private parseGeneration = 0;
 
     constructor() {
-        this.disposables.push(
-            vscode.window.onDidChangeActiveTextEditor(() => {
-                this.refresh();
-            })
-        );
-
-        this.disposables.push(
-            vscode.workspace.onDidChangeTextDocument((e) => {
-                if (e.document === vscode.window.activeTextEditor?.document) {
-                    this.debouncedRefresh();
-                }
-            })
-        );
-
-        // Initial refresh
+        super();
         this.refresh();
     }
 
-    dispose(): void {
-        if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
-        }
-        this.disposables.forEach(d => d.dispose());
-        this._onDidChangeTreeData.dispose();
-    }
-
-    private debouncedRefresh(): void {
-        if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
-        }
-        this.refreshTimeout = setTimeout(() => {
-            this.refresh();
-        }, 300);
+    protected onDocumentClosed(): void {
+        this.items = [];
+        this.documentUri = undefined;
+        this._onDidChangeTreeData.fire();
     }
 
     refresh(): void {
-        this.parseDocument();
+        void this.parseDocument();
     }
 
     private async parseDocument(): Promise<void> {
-        this.items = [];
-        this.documentUri = undefined;
+        const generation = ++this.parseGeneration;
 
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            this._onDidChangeTreeData.fire();
-            return;
-        }
-
-        const document = editor.document;
-        if (document.languageId !== 'markdown') {
-            this._onDidChangeTreeData.fire();
+        const document = this.getTargetMarkdownDocument();
+        if (!document) {
+            if (!this.documentUri) {
+                this.items = [];
+                this._onDidChangeTreeData.fire();
+            }
             return;
         }
 
@@ -73,32 +40,41 @@ export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineI
                 document.uri
             );
 
-            if (symbols && symbols.length > 0) {
-                this.items = this.convertSymbols(symbols, document.uri);
+            // A newer parseDocument call has started; discard this result
+            if (generation !== this.parseGeneration) {
+                return;
             }
+
+            this.items = (symbols && symbols.length > 0)
+                ? this.convertSymbols(symbols, document.uri, document)
+                : [];
         } catch {
-            // Fallback: symbol provider not available yet, ignore
+            if (generation !== this.parseGeneration) {
+                return;
+            }
+            this.items = [];
         }
 
         this._onDidChangeTreeData.fire();
     }
 
-    private convertSymbols(symbols: vscode.DocumentSymbol[], uri: vscode.Uri, depth: number = 1): OutlineItem[] {
-        const editor = vscode.window.activeTextEditor;
-
+    private convertSymbols(
+        symbols: vscode.DocumentSymbol[],
+        uri: vscode.Uri,
+        document: vscode.TextDocument,
+        depth: number = 1
+    ): OutlineItem[] {
         return symbols.map(symbol => {
             const children = symbol.children.length > 0
-                ? this.convertSymbols(symbol.children, uri, depth + 1)
+                ? this.convertSymbols(symbol.children, uri, document, depth + 1)
                 : [];
 
             // Read the actual line to get the real heading level from # count
             let level = depth;
-            if (editor) {
-                const lineText = editor.document.lineAt(symbol.selectionRange.start.line).text;
-                const match = lineText.match(/^(#{1,6})\s/);
-                if (match) {
-                    level = match[1].length;
-                }
+            const lineText = document.lineAt(symbol.selectionRange.start.line).text;
+            const match = lineText.match(/^(#{1,6})\s/);
+            if (match) {
+                level = match[1].length;
             }
 
             return new OutlineItem(
@@ -175,7 +151,34 @@ export class OutlineItem extends vscode.TreeItem {
 export async function gotoHeading(uri: vscode.Uri, line: number): Promise<void> {
     try {
         const doc = await vscode.workspace.openTextDocument(uri);
-        const editor = await vscode.window.showTextDocument(doc);
+        const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+        const previewActive = !!activeTab && (
+            (activeTab.input instanceof vscode.TabInputCustom &&
+                activeTab.input.viewType === 'vscode.markdown.preview.editor') ||
+            (activeTab.input instanceof vscode.TabInputWebview &&
+                activeTab.input.viewType === 'markdown.preview')
+        );
+
+        let sourceColumn: vscode.ViewColumn | undefined;
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                if (
+                    tab.input instanceof vscode.TabInputText &&
+                    tab.input.uri.toString() === uri.toString()
+                ) {
+                    sourceColumn = group.viewColumn;
+                    break;
+                }
+            }
+            if (sourceColumn !== undefined) {
+                break;
+            }
+        }
+
+        const editor = await vscode.window.showTextDocument(doc, {
+            viewColumn: sourceColumn ?? (previewActive ? vscode.ViewColumn.Beside : undefined),
+            preserveFocus: previewActive
+        });
         const position = new vscode.Position(line, 0);
         editor.selection = new vscode.Selection(position, position);
         editor.revealRange(

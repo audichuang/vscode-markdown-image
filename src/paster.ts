@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import dayjs from 'dayjs';
 import { loadConfig, PasteImageConfig, FILE_PATH_CONFIRM_INPUTBOX_MODE } from './config';
 import { replacePathVariables, renderFilePath } from './pathVariables';
@@ -14,40 +13,51 @@ class PluginError extends Error {
     }
 }
 
-function getProjectRoot(): string | undefined {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    return workspaceFolders?.[0]?.uri.fsPath;
+function getProjectRoot(fileUri: vscode.Uri): string | undefined {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
+    if (workspaceFolder) {
+        return workspaceFolder.uri.fsPath;
+    }
+    // Fallback for files outside any workspace folder
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
 async function ensureDirectoryExists(dirPath: string): Promise<void> {
+    const dirUri = vscode.Uri.file(dirPath);
     try {
-        await fs.promises.mkdir(dirPath, { recursive: true });
-    } catch (err) {
-        const error = err as NodeJS.ErrnoException;
-        if (error.code !== 'EEXIST') {
-            throw err;
-        }
+        await vscode.workspace.fs.createDirectory(dirUri);
+    } catch {
+        // Directory may already exist, which is fine
     }
 }
 
 async function createImageDirWithImagePath(imagePath: string): Promise<string> {
     const imageDir = path.dirname(imagePath);
+    const dirUri = vscode.Uri.file(imageDir);
 
     try {
-        const stats = await fs.promises.stat(imageDir);
-        if (!stats.isDirectory()) {
+        const stat = await vscode.workspace.fs.stat(dirUri);
+        if (stat.type !== vscode.FileType.Directory) {
             throw new PluginError(
                 `The image dest directory '${imageDir}' is a file. Please check your 'markink.imagePath' config.`
             );
         }
         return imagePath;
     } catch (err) {
-        const error = err as NodeJS.ErrnoException;
-        if (error.code === 'ENOENT') {
+        if (err instanceof vscode.FileSystemError && err.code === 'FileNotFound') {
             await ensureDirectoryExists(imageDir);
             return imagePath;
         }
-        throw err;
+        if (err instanceof PluginError) {
+            throw err;
+        }
+        // For other FileSystemError (e.g. EntryNotFound), create directory
+        try {
+            await ensureDirectoryExists(imageDir);
+            return imagePath;
+        } catch {
+            throw err;
+        }
     }
 }
 
@@ -159,11 +169,11 @@ export async function paste(): Promise<void> {
     }
 
     const filePath = fileUri.fsPath;
-    const projectPath = getProjectRoot();
+    const projectPath = getProjectRoot(fileUri);
 
     const selection = editor.selection;
     const selectText = editor.document.getText(selection);
-    if (selectText && /[\\:*?<>|]/.test(selectText)) {
+    if (selectText && /[\\/:"*?<>|]/.test(selectText)) {
         logger.showInformationMessage('Your selection is not a valid filename!');
         return;
     }
@@ -199,7 +209,7 @@ export async function paste(): Promise<void> {
     // Use async file check to avoid blocking UI
     let exists = false;
     try {
-        await fs.promises.access(imagePath, fs.constants.F_OK);
+        await vscode.workspace.fs.stat(vscode.Uri.file(imagePath));
         exists = true;
     } catch {
         exists = false;

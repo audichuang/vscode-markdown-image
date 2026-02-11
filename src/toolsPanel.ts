@@ -21,7 +21,7 @@ const TOOLS: ToolItem[] = [
         label: 'Export Markdown',
         icon: 'export',
         command: 'markink.exportMarkdown',
-        description: 'Export Markdown to HTML, PDF, or Word'
+        description: 'Export Markdown to HTML or Word'
     },
     {
         id: 'checkImages',

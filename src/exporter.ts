@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import MarkdownIt from 'markdown-it';
@@ -10,27 +9,39 @@ interface ExportResult {
     error?: string;
 }
 
+function isMarkdownFile(uri: vscode.Uri): boolean {
+    const ext = path.extname(uri.fsPath).toLowerCase();
+    return ext === '.md' || ext === '.markdown';
+}
+
 // Called from right-click context menu with file URI
-export async function exportMarkdown(uri?: vscode.Uri): Promise<void> {
+export async function exportMarkdown(uri?: vscode.Uri, selectedUris?: vscode.Uri[]): Promise<void> {
     let fileUris: vscode.Uri[];
 
     // If called from context menu, use that file; otherwise show file picker
     if (uri) {
-        fileUris = [uri];
+        const candidates = (selectedUris && selectedUris.length > 0 ? selectedUris : [uri])
+            .filter(isMarkdownFile);
+        fileUris = candidates;
     } else {
         // Fallback: Show file picker for batch export
         const selected = await vscode.window.showOpenDialog({
             canSelectFiles: true,
             canSelectFolders: false,
             canSelectMany: true,
-            filters: { 'Markdown': ['md'] },
+            filters: { 'Markdown': ['md', 'markdown'] },
             title: 'Select Markdown Files to Export'
         });
 
         if (!selected || selected.length === 0) {
             return;
         }
-        fileUris = selected;
+        fileUris = selected.filter(isMarkdownFile);
+    }
+
+    if (fileUris.length === 0) {
+        vscode.window.showInformationMessage('No Markdown files selected.');
+        return;
     }
 
     // Select output directory
@@ -75,7 +86,7 @@ export async function exportMarkdown(uri?: vscode.Uri): Promise<void> {
 
             const fileUri = fileUris[i];
             const mdFilePath = fileUri.fsPath;
-            const baseName = path.basename(mdFilePath, '.md');
+            const baseName = path.parse(mdFilePath).name;
             const mdDir = path.dirname(mdFilePath);
 
             progress.report({
@@ -84,13 +95,14 @@ export async function exportMarkdown(uri?: vscode.Uri): Promise<void> {
             });
 
             try {
-                const markdown = fs.readFileSync(mdFilePath, 'utf-8');
+                const markdownBytes = await vscode.workspace.fs.readFile(fileUri);
+                const markdown = Buffer.from(markdownBytes).toString('utf-8');
 
                 if (format === 'HTML') {
                     const htmlContent = md.render(markdown);
                     const htmlFull = wrapHtml(htmlContent, baseName, mdDir);
-                    const outputPath = path.join(outputDir, `${baseName}.html`);
-                    fs.writeFileSync(outputPath, htmlFull, 'utf-8');
+                    const outputUri = vscode.Uri.file(path.join(outputDir, `${baseName}.html`));
+                    await vscode.workspace.fs.writeFile(outputUri, Buffer.from(htmlFull, 'utf-8'));
                     results.push({ fileName: baseName, success: true });
                 } else if (format === 'Word (.docx)') {
                     const outputPath = path.join(outputDir, `${baseName}.docx`);
@@ -112,7 +124,7 @@ export async function exportMarkdown(uri?: vscode.Uri): Promise<void> {
 }
 
 function wrapHtml(content: string, title: string, baseDir: string): string {
-    // Convert relative image paths to absolute for PDF/Word rendering
+    // Convert relative image paths to absolute for exported HTML rendering
     const contentWithAbsolutePaths = content.replace(
         /src="(?!http|https|data:)([^"]+)"/g,
         (_match, relativePath) => {
@@ -238,7 +250,8 @@ async function exportToWord(markdown: string, outputPath: string): Promise<void>
     // Convert MDAST to DOCX buffer
     const docxBuffer = await toDocx(ast as Parameters<typeof toDocx>[0], {}, {}, 'nodebuffer');
 
-    fs.writeFileSync(outputPath, docxBuffer as Buffer);
+    const outputUri = vscode.Uri.file(outputPath);
+    await vscode.workspace.fs.writeFile(outputUri, docxBuffer as Uint8Array);
 }
 
 

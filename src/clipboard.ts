@@ -14,96 +14,162 @@ function getScriptPath(scriptName: string): string {
 }
 
 export async function saveClipboardImageToFile(imagePath: string): Promise<ClipboardResult> {
-    const platform = process.platform;
+    if (process.platform === 'win32') {
+        return saveClipboardImageWindows(imagePath);
+    }
+    if (process.platform === 'darwin') {
+        return saveClipboardImageMac(imagePath);
+    }
+    return saveClipboardImageLinux(imagePath);
+}
 
+interface SpawnResult {
+    stdout: string;
+    stderr: string;
+    error?: string;
+    timedOut: boolean;
+}
+
+function runScript(command: string, args: string[]): Promise<SpawnResult> {
     return new Promise((resolve) => {
-        if (platform === 'win32') {
-            saveClipboardImageWindows(imagePath, resolve);
-        } else if (platform === 'darwin') {
-            saveClipboardImageMac(imagePath, resolve);
-        } else {
-            saveClipboardImageLinux(imagePath, resolve);
-        }
+        const child = spawn(command, args);
+        let stdout = '';
+        let stderr = '';
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                child.kill();
+                resolve({ stdout, stderr, error: 'timeout', timedOut: true });
+            }
+        }, 15000);
+
+        const finalize = (result: SpawnResult): void => {
+            if (!settled) {
+                settled = true;
+                clearTimeout(timeout);
+                resolve(result);
+            }
+        };
+
+        child.stdout.on('data', (data: Buffer) => {
+            stdout += data.toString();
+        });
+
+        child.stderr.on('data', (data: Buffer) => {
+            stderr += data.toString();
+        });
+
+        child.on('error', (err: NodeJS.ErrnoException) => {
+            finalize({ stdout, stderr, error: err.message, timedOut: false });
+        });
+
+        child.on('close', (code) => {
+            if (code !== 0 && code !== null) {
+                const errorMsg = stderr.trim() || `Process exited with code ${code}`;
+                finalize({ stdout, stderr, error: errorMsg, timedOut: false });
+            } else {
+                finalize({ stdout, stderr, timedOut: false });
+            }
+        });
     });
 }
 
-function saveClipboardImageWindows(imagePath: string, resolve: (result: ClipboardResult) => void): void {
-    const scriptPath = getScriptPath('pc.ps1');
+function parseClipboardResult(stdout: string): ClipboardResult {
+    const lines = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+    const result = lines[lines.length - 1] || '';
 
+    if (result === 'no image' || result === '') {
+        return { success: false, error: 'no image' };
+    }
+
+    return { success: true, imagePath: result };
+}
+
+function isNoImageResult(output: string): boolean {
+    return output
+        .split(/\r?\n/)
+        .map((line) => line.trim().toLowerCase())
+        .some((line) => line === 'no image');
+}
+
+async function saveClipboardImageWindows(imagePath: string): Promise<ClipboardResult> {
+    const scriptPath = getScriptPath('pc.ps1');
     let command = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
     if (!fs.existsSync(command)) {
         command = 'powershell';
     }
 
-    const powershell = spawn(command, [
+    const result = await runScript(command, [
         '-noprofile',
         '-noninteractive',
         '-nologo',
         '-sta',
-        '-executionpolicy', 'unrestricted',
+        '-executionpolicy', 'bypass',
         '-windowstyle', 'hidden',
         '-file', scriptPath,
         imagePath
     ]);
 
-    powershell.on('error', (e: NodeJS.ErrnoException) => {
-        if (e.code === 'ENOENT') {
+    if (isNoImageResult(result.stdout) || isNoImageResult(result.stderr)) {
+        return { success: false, error: 'no image' };
+    }
+
+    if (result.error) {
+        if (result.error.includes('ENOENT')) {
             logger.showErrorMessage('The powershell command is not in your PATH environment variables. Please add it and retry.');
+        } else if (result.timedOut) {
+            logger.showErrorMessage('Paste image timed out while running PowerShell.');
         } else {
-            logger.showErrorMessage(e.message);
+            logger.showErrorMessage(result.error);
         }
-        resolve({ success: false, error: e.message });
-    });
+        return { success: false, error: result.error };
+    }
 
-    powershell.stdout.on('data', (data: Buffer) => {
-        const result = data.toString().trim();
-        if (result === 'no image') {
-            resolve({ success: false, error: 'no image' });
-        } else {
-            resolve({ success: true, imagePath: result });
-        }
-    });
+    return parseClipboardResult(result.stdout);
 }
 
-function saveClipboardImageMac(imagePath: string, resolve: (result: ClipboardResult) => void): void {
+async function saveClipboardImageMac(imagePath: string): Promise<ClipboardResult> {
     const scriptPath = getScriptPath('mac.applescript');
+    const result = await runScript('osascript', [scriptPath, imagePath]);
 
-    const ascript = spawn('osascript', [scriptPath, imagePath]);
+    if (isNoImageResult(result.stdout) || isNoImageResult(result.stderr)) {
+        return { success: false, error: 'no image' };
+    }
 
-    ascript.on('error', (e: Error) => {
-        logger.showErrorMessage(e.message);
-        resolve({ success: false, error: e.message });
-    });
-
-    ascript.stdout.on('data', (data: Buffer) => {
-        const result = data.toString().trim();
-        if (result === 'no image') {
-            resolve({ success: false, error: 'no image' });
+    if (result.error) {
+        if (result.timedOut) {
+            logger.showErrorMessage('Paste image timed out while running osascript.');
         } else {
-            resolve({ success: true, imagePath: result });
+            logger.showErrorMessage(result.error);
         }
-    });
+        return { success: false, error: result.error };
+    }
+
+    return parseClipboardResult(result.stdout);
 }
 
-function saveClipboardImageLinux(imagePath: string, resolve: (result: ClipboardResult) => void): void {
+async function saveClipboardImageLinux(imagePath: string): Promise<ClipboardResult> {
     const scriptPath = getScriptPath('linux.sh');
+    const result = await runScript('sh', [scriptPath, imagePath]);
 
-    const ascript = spawn('sh', [scriptPath, imagePath]);
+    if (isNoImageResult(result.stdout) || isNoImageResult(result.stderr)) {
+        return { success: false, error: 'no image' };
+    }
 
-    ascript.on('error', (e: Error) => {
-        logger.showErrorMessage(e.message);
-        resolve({ success: false, error: e.message });
-    });
-
-    ascript.stdout.on('data', (data: Buffer) => {
-        const result = data.toString().trim();
-        if (result === 'no xclip') {
-            logger.showInformationMessage('You need to install xclip command first.');
-            resolve({ success: false, error: 'no xclip' });
-        } else if (result === 'no image') {
-            resolve({ success: false, error: 'no image' });
+    if (result.error) {
+        if (result.timedOut) {
+            logger.showErrorMessage('Paste image timed out while running shell script.');
+        } else if (result.error.includes('no clipboard tool')) {
+            logger.showInformationMessage('You need to install xclip (X11) or wl-paste (Wayland) first.');
         } else {
-            resolve({ success: true, imagePath: result });
+            logger.showErrorMessage(result.error);
         }
-    });
+        return { success: false, error: result.error };
+    }
+
+    return parseClipboardResult(result.stdout);
 }

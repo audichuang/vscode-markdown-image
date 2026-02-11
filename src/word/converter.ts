@@ -1,12 +1,23 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import mammoth from 'mammoth';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import { JSDOM } from 'jsdom';
-import { log, showInformationMessage, showErrorMessage } from '../logger';
+import { log, showInformationMessage } from '../logger';
+import { sanitizeFileName } from '../sanitize';
 import { ConversionResult } from './types';
+
+// linkedom is ESM-only; use dynamic import with manual types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ParseHTMLFn = (html: string) => any;
+let _parseHTML: ParseHTMLFn | undefined;
+async function getParseHTML(): Promise<ParseHTMLFn> {
+    if (!_parseHTML) {
+        const mod = await import('linkedom');
+        _parseHTML = mod.parseHTML as ParseHTMLFn;
+    }
+    return _parseHTML!;
+}
 
 interface BatchResult {
     fileName: string;
@@ -15,19 +26,37 @@ interface BatchResult {
     error?: string;
 }
 
-export async function convertWordToMarkdown(): Promise<void> {
-    // Step 1: 選擇多個 Word 檔案
-    const fileUris = await vscode.window.showOpenDialog({
-        canSelectFiles: true,
-        canSelectFolders: false,
-        canSelectMany: true,
-        filters: {
-            'Word Documents': ['docx']
-        },
-        title: 'Select Word Documents to Convert'
-    });
+function isDocxFile(uri: vscode.Uri): boolean {
+    return path.extname(uri.fsPath).toLowerCase() === '.docx';
+}
 
-    if (!fileUris || fileUris.length === 0) {
+export async function convertWordToMarkdown(uri?: vscode.Uri, selectedUris?: vscode.Uri[]): Promise<void> {
+    let fileUris: vscode.Uri[] = [];
+
+    if (uri) {
+        const candidates = (selectedUris && selectedUris.length > 0 ? selectedUris : [uri])
+            .filter(isDocxFile);
+        fileUris = candidates;
+    } else {
+        // Step 1: 選擇多個 Word 檔案
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: true,
+            filters: {
+                'Word Documents': ['docx']
+            },
+            title: 'Select Word Documents to Convert'
+        });
+
+        if (!selected || selected.length === 0) {
+            return;
+        }
+        fileUris = selected.filter(isDocxFile);
+    }
+
+    if (fileUris.length === 0) {
+        showInformationMessage('No .docx files selected.');
         return;
     }
 
@@ -47,8 +76,11 @@ export async function convertWordToMarkdown(): Promise<void> {
     const imagesDir = path.join(outputDir, 'images');
 
     // 確保圖片資料夾存在
-    if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
+    const imagesDirUri = vscode.Uri.file(imagesDir);
+    try {
+        await vscode.workspace.fs.createDirectory(imagesDirUri);
+    } catch {
+        // Directory may already exist
     }
 
     // Step 3: 批次轉換
@@ -82,7 +114,8 @@ export async function convertWordToMarkdown(): Promise<void> {
                     wordFilePath, imagesDir, wordFileName
                 );
                 const markdown = cleanupMarkdown(result.markdown, wordFileName);
-                fs.writeFileSync(mdFilePath, markdown, 'utf-8');
+                const mdFileUri = vscode.Uri.file(mdFilePath);
+                await vscode.workspace.fs.writeFile(mdFileUri, Buffer.from(markdown, 'utf-8'));
 
                 // 處理 mammoth 警告
                 if (result.warnings.length > 0) {
@@ -157,7 +190,8 @@ export async function convertDocxWithImages(
                     const imgPath = path.join(imagesDir, newName);
 
                     // 儲存圖片
-                    fs.writeFileSync(imgPath, imageBuffer);
+                    const imgUri = vscode.Uri.file(imgPath);
+                    await vscode.workspace.fs.writeFile(imgUri, imageBuffer);
 
                     return { src: `images/${newName}` };
                 } catch (err) {
@@ -174,7 +208,8 @@ export async function convertDocxWithImages(
     }
 
     // 預處理：標記複雜表格，避免被 Turndown 內部處理破壞結構
-    const preprocessedHtml = preprocessComplexTables(result.value);
+    const parseHTML = await getParseHTML();
+    const preprocessedHtml = preprocessComplexTables(parseHTML, result.value);
 
     // 將 HTML 轉換為 Markdown
     const turndownService = new TurndownService({
@@ -198,7 +233,7 @@ export async function convertDocxWithImages(
         },
         replacement: function(_content, node) {
             // 直接返回內部的 HTML（已保存在 data 屬性中）
-            const originalHtml = (node as Element).getAttribute('data-html') || '';
+            const originalHtml = (node as unknown as { getAttribute(name: string): string | null }).getAttribute('data-html') || '';
             return '\n\n' + originalHtml + '\n\n';
         }
     });
@@ -208,7 +243,7 @@ export async function convertDocxWithImages(
         filter: 'table',
         replacement: function(_content, node) {
             const tableHtml = (node as unknown as { outerHTML?: string }).outerHTML || '';
-            return convertSimpleTableToMarkdown(tableHtml, turndownService);
+            return convertSimpleTableToMarkdown(parseHTML, tableHtml, turndownService);
         }
     });
 
@@ -225,40 +260,36 @@ export async function convertDocxWithImages(
  * 預處理 HTML：將複雜表格用自定義標籤包裹，避免被 Turndown 內部處理破壞結構
  * 這樣可以確保複雜表格的原始 HTML 被完整保留
  */
-function preprocessComplexTables(html: string): string {
-    const dom = new JSDOM(html);
-    try {
-        const doc = dom.window.document;
+function preprocessComplexTables(parseHTML: ParseHTMLFn, html: string): string {
+    const { document: doc } = parseHTML(`<body>${html}</body>`);
 
-        // 找出所有頂層表格（不是巢狀在其他表格內的）
-        const allTables = doc.querySelectorAll('table');
+    // 找出所有頂層表格（不是巢狀在其他表格內的）
+    const allTables = doc.querySelectorAll('table');
 
-        for (const table of allTables) {
-            // 跳過已經在另一個表格內的表格（巢狀表格）
-            if (table.parentElement?.closest('table')) {
-                continue;
-            }
-
-            // 判斷是否為複雜表格
-            if (isComplexTable(table)) {
-                // 使用自定義標籤，Turndown 才能正確識別
-                const wrapper = doc.createElement('complex-table');
-                wrapper.setAttribute('data-html', table.outerHTML);
-                wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
-                table.parentNode?.replaceChild(wrapper, table);
-            }
+    for (const table of allTables) {
+        // 跳過已經在另一個表格內的表格（巢狀表格）
+        if (table.parentElement?.closest('table')) {
+            continue;
         }
 
-        return doc.body.innerHTML;
-    } finally {
-        dom.window.close();
+        // 判斷是否為複雜表格
+        if (isComplexTable(table)) {
+            // 使用自定義標籤，Turndown 才能正確識別
+            const wrapper = doc.createElement('complex-table');
+            wrapper.setAttribute('data-html', table.outerHTML);
+            wrapper.textContent = 'COMPLEX_TABLE_PLACEHOLDER';
+            table.parentNode?.replaceChild(wrapper, table);
+        }
     }
+
+    return doc.body.innerHTML;
 }
 
 /**
  * 判斷表格是否為複雜表格（直接操作 DOM 節點）
  */
-function isComplexTable(table: Element): boolean {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isComplexTable(table: any): boolean {
     // 檢查是否有圖片
     if (table.querySelectorAll('img').length > 0) {
         return true;
@@ -292,77 +323,72 @@ function isComplexTable(table: Element): boolean {
  * 將簡單的 HTML 表格轉換為 Markdown 格式
  * 使用 TurndownService 處理單元格內容，保留粗體、連結等格式
  */
-function convertSimpleTableToMarkdown(tableHtml: string, turndownService: TurndownService): string {
-    const dom = new JSDOM(tableHtml);
-    try {
-        const doc = dom.window.document;
-        const table = doc.querySelector('table');
+function convertSimpleTableToMarkdown(parseHTML: ParseHTMLFn, tableHtml: string, turndownService: TurndownService): string {
+    const { document: doc } = parseHTML(`<body>${tableHtml}</body>`);
+    const table = doc.querySelector('table');
 
-        if (!table) {
-            return '';
-        }
-
-        const rows: string[][] = [];
-        const tableRows = table.querySelectorAll('tr');
-
-        for (const tr of tableRows) {
-            const cells: string[] = [];
-            const tableCells = tr.querySelectorAll('td, th');
-
-            for (const cell of tableCells) {
-                // 任務 2：使用 Turndown 處理單元格內容，保留格式
-                const cellContent = getCellContent(cell.innerHTML, turndownService);
-                cells.push(cellContent);
-            }
-
-            if (cells.length > 0) {
-                rows.push(cells);
-            }
-        }
-
-        if (rows.length === 0) {
-            return '';
-        }
-
-        // 計算欄寬
-        const colCount = Math.max(...rows.map(r => r.length));
-        const colWidths: number[] = Array(colCount).fill(3);
-
-        for (const row of rows) {
-            for (let i = 0; i < row.length; i++) {
-                colWidths[i] = Math.max(colWidths[i], row[i].length);
-            }
-        }
-
-        // 產生表格
-        const lines: string[] = [];
-
-        // Header
-        const header = rows[0] || [];
-        const headerCells = [];
-        for (let i = 0; i < colCount; i++) {
-            headerCells.push((header[i] || '').padEnd(colWidths[i]));
-        }
-        lines.push('| ' + headerCells.join(' | ') + ' |');
-
-        // Separator
-        const separators = colWidths.map(w => '-'.repeat(w));
-        lines.push('| ' + separators.join(' | ') + ' |');
-
-        // Data rows
-        for (let r = 1; r < rows.length; r++) {
-            const row = rows[r];
-            const cells = [];
-            for (let i = 0; i < colCount; i++) {
-                cells.push((row[i] || '').padEnd(colWidths[i]));
-            }
-            lines.push('| ' + cells.join(' | ') + ' |');
-        }
-
-        return '\n' + lines.join('\n') + '\n';
-    } finally {
-        dom.window.close();
+    if (!table) {
+        return '';
     }
+
+    const rows: string[][] = [];
+    const tableRows = table.querySelectorAll('tr');
+
+    for (const tr of tableRows) {
+        const cells: string[] = [];
+        const tableCells = tr.querySelectorAll('td, th');
+
+        for (const cell of tableCells) {
+            // 任務 2：使用 Turndown 處理單元格內容，保留格式
+            const cellContent = getCellContent(cell.innerHTML, turndownService);
+            cells.push(cellContent);
+        }
+
+        if (cells.length > 0) {
+            rows.push(cells);
+        }
+    }
+
+    if (rows.length === 0) {
+        return '';
+    }
+
+    // 計算欄寬
+    const colCount = Math.max(...rows.map(r => r.length));
+    const colWidths: number[] = Array(colCount).fill(3);
+
+    for (const row of rows) {
+        for (let i = 0; i < row.length; i++) {
+            colWidths[i] = Math.max(colWidths[i], row[i].length);
+        }
+    }
+
+    // 產生表格
+    const lines: string[] = [];
+
+    // Header
+    const header = rows[0] || [];
+    const headerCells = [];
+    for (let i = 0; i < colCount; i++) {
+        headerCells.push((header[i] || '').padEnd(colWidths[i]));
+    }
+    lines.push('| ' + headerCells.join(' | ') + ' |');
+
+    // Separator
+    const separators = colWidths.map(w => '-'.repeat(w));
+    lines.push('| ' + separators.join(' | ') + ' |');
+
+    // Data rows
+    for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const cells = [];
+        for (let i = 0; i < colCount; i++) {
+            cells.push((row[i] || '').padEnd(colWidths[i]));
+        }
+        lines.push('| ' + cells.join(' | ') + ' |');
+    }
+
+    return '\n' + lines.join('\n') + '\n';
 }
 
 /**
@@ -407,27 +433,8 @@ function cleanupMarkdown(markdown: string, title: string): string {
     return result;
 }
 
-// 安全性：清理檔名（export for testing）
-export function sanitizeFileName(name: string): string {
-    const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
-
-    let result = name
-        .replace(/[<>:"/\\|?*]/g, '_')                // 危險字元
-        .split('').map(char => {                      // 控制字元 + DEL
-            const code = char.charCodeAt(0);
-            return (code <= 0x1f || code === 0x7f) ? '_' : char;
-        }).join('')
-        .replace(/\.{2,}/g, '_')                      // 路徑穿越
-        .replace(/^\.+/, '_')                         // 開頭的點
-        .replace(/[\s.]+$/, '_')                      // 結尾空格和點
-        .slice(0, 200);
-
-    if (WINDOWS_RESERVED.test(result)) {
-        result = '_' + result;
-    }
-
-    return result || '_';  // 防止空字串
-}
+// Re-export sanitizeFileName for external consumers
+export { sanitizeFileName } from '../sanitize';
 
 function showBatchSummary(results: BatchResult[], outputDir: string): void {
     const succeeded = results.filter(r => r.success);
@@ -441,7 +448,7 @@ function showBatchSummary(results: BatchResult[], outputDir: string): void {
 
     if (failed.length === 0) {
         showInformationMessage(
-            `✅ Converted ${succeeded.length} file${succeeded.length > 1 ? 's' : ''}, extracted ${totalImages} image${totalImages !== 1 ? 's' : ''}`
+            `Converted ${succeeded.length} file${succeeded.length > 1 ? 's' : ''}, extracted ${totalImages} image${totalImages !== 1 ? 's' : ''}`
         );
     } else {
         const failedNames = failed.map(f => f.fileName).join(', ');

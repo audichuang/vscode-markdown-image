@@ -1,6 +1,24 @@
 import * as vscode from 'vscode';
 
+async function executeNativeTocCommand(commandId: string): Promise<boolean> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.languageId !== 'markdown') {
+        return false;
+    }
+
+    try {
+        await vscode.commands.executeCommand(commandId);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export async function insertToc(): Promise<void> {
+    if (await executeNativeTocCommand('markdown.extension.toc.create')) {
+        return;
+    }
+
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         vscode.window.showInformationMessage('No active editor found.');
@@ -90,6 +108,10 @@ function generateToc(headings: Heading[]): string {
 }
 
 export async function updateToc(): Promise<void> {
+    if (await executeNativeTocCommand('markdown.extension.toc.update')) {
+        return;
+    }
+
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         vscode.window.showInformationMessage('No active editor found.');
@@ -203,21 +225,17 @@ function formatMarkdownTable(tableText: string): string {
         return tableText;
     }
 
-    // Parse cells
-    const rows: string[][] = lines.map(line => {
-        return line
-            .split('|')
-            .map(cell => cell.trim())
-            .filter((_, index, arr) => index > 0 && index < arr.length - 1 || arr.length <= 2);
-    });
-
     // Handle edge case where | is at start/end
     const parsedRows: string[][] = lines.map(line => {
         const trimmed = line.trim();
         const cells = trimmed.split('|');
         // Remove empty first/last if line starts/ends with |
-        if (cells[0] === '') cells.shift();
-        if (cells[cells.length - 1] === '') cells.pop();
+        if (cells[0] === '') {
+            cells.shift();
+        }
+        if (cells[cells.length - 1] === '') {
+            cells.pop();
+        }
         return cells.map(c => c.trim());
     });
 

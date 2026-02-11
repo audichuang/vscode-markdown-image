@@ -62,7 +62,7 @@ export async function configureSettings(): Promise<void> {
 
     const scopeChoice = await vscode.window.showQuickPick(scopeOptions, {
         placeHolder: '選擇設定範圍',
-        title: 'Paste Image: 配置設定'
+        title: 'MarkInk: 配置設定'
     });
 
     if (!scopeChoice) {
@@ -90,7 +90,7 @@ export async function configureSettings(): Promise<void> {
         })),
         {
             placeHolder: '選擇圖片存放位置',
-            title: 'Paste Image: 選擇圖片路徑'
+            title: 'MarkInk: 選擇圖片路徑'
         }
     );
 
@@ -133,7 +133,7 @@ export async function configureSettings(): Promise<void> {
 
         const basePathChoice = await vscode.window.showQuickPick(basePathOptions, {
             placeHolder: '選擇基準路徑（用於計算相對路徑）',
-            title: 'Paste Image: 選擇基準路徑'
+            title: 'MarkInk: 選擇基準路徑'
         });
 
         if (!basePathChoice) {
