@@ -75,7 +75,7 @@ export class ImageListProvider implements vscode.TreeDataProvider<ImageTreeItem>
 
         this.documentUri = document.uri;
         const text = document.getText();
-        const lines = text.split('\n');
+        const lines = text.split(/\r?\n/);
 
         // 改進的正則表達式：處理帶有 title 的圖片語法
         const markdownImageRegex = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;

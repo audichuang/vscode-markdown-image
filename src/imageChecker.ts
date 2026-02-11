@@ -161,7 +161,7 @@ async function scanImageLinksAsync(document: vscode.TextDocument): Promise<Image
             }
 
             // 計算行號和列號
-            const linesBefore = text.substring(0, match.index).split('\n');
+            const linesBefore = text.substring(0, match.index).split(/\r?\n/);
             const lineNumber = linesBefore.length - 1;
             const column = linesBefore[linesBefore.length - 1].length;
 

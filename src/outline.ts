@@ -74,7 +74,7 @@ export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineI
 
         this.documentUri = document.uri;
         const text = document.getText();
-        const lines = text.split('\n');
+        const lines = text.split(/\r?\n/);
 
         // Parse headings
         const headingRegex = /^(#{1,6})\s+(.+)$/;

@@ -35,7 +35,7 @@ interface Heading {
 
 function parseHeadings(text: string, excludeStart?: number, excludeEnd?: number): Heading[] {
     const headings: Heading[] = [];
-    const lines = text.split('\n');
+    const lines = text.split(/\r?\n/);
     const headingRegex = /^(#{1,6})\s+(.+)$/;
 
     let currentPos = 0;
@@ -198,7 +198,7 @@ function findTableRange(document: vscode.TextDocument, selection: vscode.Selecti
 }
 
 function formatMarkdownTable(tableText: string): string {
-    const lines = tableText.split('\n').filter(line => line.trim());
+    const lines = tableText.split(/\r?\n/).filter(line => line.trim());
     if (lines.length < 2) {
         return tableText;
     }
