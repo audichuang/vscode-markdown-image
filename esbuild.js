@@ -8,6 +8,7 @@ const buildOptions = {
   outfile: 'dist/extension.js',
   external: [
     'vscode',
+    'jsdom',          // jsdom 有運行時資源檔案（css/etc），必須 external
     'canvas',         // 原生模組，無法打包
     'bufferutil',     // 原生模組，無法打包
     'utf-8-validate', // 原生模組，無法打包
