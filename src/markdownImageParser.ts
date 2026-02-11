@@ -11,10 +11,16 @@ export interface ImageReference {
 }
 
 /**
- * Complete regex supporting double-quoted, single-quoted, and parenthesized title.
+ * Regex supporting double-quoted, single-quoted, and parenthesized title.
  * Matches: ![alt](path), ![alt](path "title"), ![alt](path 'title'), ![alt](path (title))
+ *
+ * Note: Exported WITHOUT the `g` flag to avoid shared mutable `lastIndex` state.
+ * Consumers that need global matching should create a new RegExp with the `g` flag.
+ *
+ * Limitation: Parentheses in file paths (e.g. `screenshot (1).png`) will not match
+ * correctly. Use URL-encoded parentheses (`%28`/`%29`) in paths as a workaround.
  */
-export const MARKDOWN_IMAGE_REGEX = /!\[([^\]]*)\]\(([^)\n]*?)(?:\s+(".*?"|'.*?'|\(.*?\)))?\)/g;
+export const MARKDOWN_IMAGE_REGEX = /!\[([^\]]*)\]\(([^)\n]*?)(?:\s+(".*?"|'.*?'|\(.*?\)))?\)/;
 
 /**
  * Parse all local image references from a Markdown document's text.
@@ -23,7 +29,7 @@ export const MARKDOWN_IMAGE_REGEX = /!\[([^\]]*)\]\(([^)\n]*?)(?:\s+(".*?"|'.*?'
 export function parseMarkdownImages(text: string, documentFsPath: string): ImageReference[] {
     const results: ImageReference[] = [];
     const documentDir = path.dirname(documentFsPath);
-    const regex = new RegExp(MARKDOWN_IMAGE_REGEX.source, MARKDOWN_IMAGE_REGEX.flags);
+    const regex = new RegExp(MARKDOWN_IMAGE_REGEX.source, 'g');
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(text)) !== null) {

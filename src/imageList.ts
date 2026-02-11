@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { MarkdownDocumentTracker } from './markdownDocumentTracker';
 import { parseMarkdownImages } from './markdownImageParser';
+import { gotoSourceLocation } from './gotoSourceLocation';
 
 export class ImageListProvider extends MarkdownDocumentTracker<ImageTreeItem> {
     private images: ReturnType<typeof parseMarkdownImages> = [];
@@ -99,43 +100,5 @@ export class ImageTreeItem extends vscode.TreeItem {
 }
 
 export async function gotoImage(uri: vscode.Uri, line: number): Promise<void> {
-    try {
-        const doc = await vscode.workspace.openTextDocument(uri);
-        const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
-        const previewActive = !!activeTab && (
-            (activeTab.input instanceof vscode.TabInputCustom &&
-                activeTab.input.viewType === 'vscode.markdown.preview.editor') ||
-            (activeTab.input instanceof vscode.TabInputWebview &&
-                activeTab.input.viewType === 'markdown.preview')
-        );
-
-        let sourceColumn: vscode.ViewColumn | undefined;
-        for (const group of vscode.window.tabGroups.all) {
-            for (const tab of group.tabs) {
-                if (
-                    tab.input instanceof vscode.TabInputText &&
-                    tab.input.uri.toString() === uri.toString()
-                ) {
-                    sourceColumn = group.viewColumn;
-                    break;
-                }
-            }
-            if (sourceColumn !== undefined) {
-                break;
-            }
-        }
-
-        const editor = await vscode.window.showTextDocument(doc, {
-            viewColumn: sourceColumn ?? (previewActive ? vscode.ViewColumn.Beside : undefined),
-            preserveFocus: previewActive
-        });
-        const position = new vscode.Position(line, 0);
-        editor.selection = new vscode.Selection(position, position);
-        editor.revealRange(
-            new vscode.Range(position, position),
-            vscode.TextEditorRevealType.InCenter
-        );
-    } catch (error) {
-        vscode.window.showErrorMessage(`Failed to navigate: ${(error as Error).message}`);
-    }
+    return gotoSourceLocation(uri, line);
 }

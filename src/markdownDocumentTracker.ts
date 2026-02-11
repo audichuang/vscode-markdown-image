@@ -12,6 +12,7 @@ export abstract class MarkdownDocumentTracker<T> implements vscode.TreeDataProvi
     protected documentUri: vscode.Uri | undefined;
     private disposables: vscode.Disposable[] = [];
     private refreshTimeout: NodeJS.Timeout | undefined;
+    private closeSettleTimeout: NodeJS.Timeout | undefined;
 
     constructor() {
         this.disposables.push(
@@ -47,7 +48,10 @@ export abstract class MarkdownDocumentTracker<T> implements vscode.TreeDataProvi
                     // Delay check: when switching to Markdown Preview, VS Code fires
                     // onDidCloseTextDocument before the preview is fully opened.
                     // A short delay allows the editor state to settle.
-                    setTimeout(() => {
+                    if (this.closeSettleTimeout) {
+                        clearTimeout(this.closeSettleTimeout);
+                    }
+                    this.closeSettleTimeout = setTimeout(() => {
                         const stillOpen = vscode.workspace.textDocuments.some(
                             d => d.uri.toString() === doc.uri.toString()
                         );
@@ -55,7 +59,7 @@ export abstract class MarkdownDocumentTracker<T> implements vscode.TreeDataProvi
                         if (!stillOpen && !stillVisibleInPreview) {
                             this.onDocumentClosed();
                         }
-                    }, 100);
+                    }, 150);
                 }
             })
         );
@@ -65,6 +69,9 @@ export abstract class MarkdownDocumentTracker<T> implements vscode.TreeDataProvi
     dispose(): void {
         if (this.refreshTimeout) {
             clearTimeout(this.refreshTimeout);
+        }
+        if (this.closeSettleTimeout) {
+            clearTimeout(this.closeSettleTimeout);
         }
         this.disposables.forEach(d => d.dispose());
         this._onDidChangeTreeData.dispose();
@@ -155,6 +162,16 @@ export abstract class MarkdownDocumentTracker<T> implements vscode.TreeDataProvi
                     tab.input.uri.toString() === uri.toString()
                 ) {
                     return true;
+                }
+                // Webview-based side preview (TabInputWebview has no .uri)
+                if (
+                    tab.input instanceof vscode.TabInputWebview &&
+                    tab.input.viewType === 'markdown.preview'
+                ) {
+                    const inferred = this.inferUriFromPreviewLabel(tab.label);
+                    if (inferred?.toString() === uri.toString()) {
+                        return true;
+                    }
                 }
             }
         }

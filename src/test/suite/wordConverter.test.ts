@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as mammoth from 'mammoth';
 import TurndownService from 'turndown';
-import { sanitizeFileName } from '../../word';
+import { sanitizeFileName } from '../../sanitize';
 
 suite('Word Converter Test Suite', () => {
     const fixturesDir = path.join(__dirname, '..', '..', '..', 'src', 'test', 'fixtures');
@@ -25,7 +25,7 @@ suite('Word Converter Test Suite', () => {
 
         test('should remove trailing spaces and dots', () => {
             assert.strictEqual(sanitizeFileName('filename...'), 'filename_');
-            assert.strictEqual(sanitizeFileName('filename   '), 'filename_');
+            assert.strictEqual(sanitizeFileName('filename   '), 'filename');
         });
 
         test('should prefix Windows reserved names', () => {
@@ -35,6 +35,11 @@ suite('Word Converter Test Suite', () => {
             assert.strictEqual(sanitizeFileName('NUL'), '_NUL');
             assert.strictEqual(sanitizeFileName('COM1'), '_COM1');
             assert.strictEqual(sanitizeFileName('LPT9'), '_LPT9');
+        });
+
+        test('should prefix Windows reserved names with extensions', () => {
+            assert.strictEqual(sanitizeFileName('CON.txt'), '_CON.txt');
+            assert.strictEqual(sanitizeFileName('NUL.png'), '_NUL.png');
         });
 
         test('should truncate long names to 200 chars', () => {

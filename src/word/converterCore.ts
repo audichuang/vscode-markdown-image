@@ -4,7 +4,7 @@
  */
 import * as path from 'path';
 import * as fs from 'fs';
-import * as mammoth from 'mammoth';
+import mammoth from 'mammoth';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { ConversionResult } from './types';
@@ -19,7 +19,7 @@ async function getParseHTML(): Promise<ParseHTMLFn> {
         const mod = await import('linkedom');
         _parseHTML = mod.parseHTML as ParseHTMLFn;
     }
-    return _parseHTML!;
+    return _parseHTML;
 }
 
 export async function convertDocxToMarkdown(
@@ -48,6 +48,8 @@ export async function convertDocxToMarkdown(
                         'image/png': '.png',
                         'image/jpeg': '.jpg',
                         'image/gif': '.gif',
+                        'image/bmp': '.bmp',
+                        'image/webp': '.webp',
                     };
                     const imgExt = extMap[contentType] || '.png';
 
@@ -56,7 +58,7 @@ export async function convertDocxToMarkdown(
                     const newName = `${safeName}-image-${String(imageIndex).padStart(3, '0')}${imgExt}`;
                     const imgPath = path.join(imagesDir, newName);
 
-                    fs.writeFileSync(imgPath, imageBuffer);
+                    await fs.promises.writeFile(imgPath, imageBuffer);
                     return { src: `images/${newName}` };
                 } catch (err) {
                     warnings.push(`Failed to extract image ${imageIndex}: ${(err as Error).message}`);
@@ -116,7 +118,9 @@ export async function convertDocxToMarkdown(
 
 function preprocessComplexTables(parseHTML: ParseHTMLFn, html: string): string {
     const { document: doc } = parseHTML(`<body>${html}</body>`);
-    const allTables = doc.querySelectorAll('table');
+    // Use Array.from to create a static snapshot before mutating the DOM
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allTables: any[] = Array.from(doc.querySelectorAll('table'));
 
     for (const table of allTables) {
         if (table.parentElement?.closest('table')) {

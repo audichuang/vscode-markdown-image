@@ -64,23 +64,23 @@ Key conversion flow:
 Clipboard image extraction is platform-specific:
 - `pc.ps1` - Windows PowerShell
 - `mac.applescript` - macOS AppleScript
-- `linux.sh` - Linux (requires `xclip`)
+- `linux.sh` - Linux (requires `wl-paste` for Wayland or `xclip` for X11)
 
 ### esbuild Configuration
 
-`jsdom` must be external (not bundled) because it has runtime resource files:
+`linkedom` must be external (ESM-only, cannot be bundled into CJS):
 ```javascript
-external: ['vscode', 'jsdom', 'canvas', 'bufferutil', 'utf-8-validate']
+external: ['vscode', 'linkedom', 'canvas', 'bufferutil', 'utf-8-validate']
 ```
 
 ### Key Dependencies
 - `mammoth` - DOCX to HTML conversion
 - `turndown` + `turndown-plugin-gfm` - HTML to Markdown conversion
-- `jsdom` - DOM parsing for table analysis
+- `linkedom` - Lightweight DOM parsing for table analysis
 - `markdown-it` - Markdown to HTML rendering (for export)
 - `md-to-docx` - Markdown to Word export
 - `dayjs` - Timestamp formatting for image filenames
-- `upath` - Cross-platform path normalization
+- `unified` + `remark-parse` + `remark-gfm` - Markdown AST processing
 
 ### Variable System
 

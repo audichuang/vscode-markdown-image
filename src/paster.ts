@@ -5,6 +5,7 @@ import { loadConfig, PasteImageConfig, FILE_PATH_CONFIRM_INPUTBOX_MODE } from '.
 import { replacePathVariables, renderFilePath } from './pathVariables';
 import { saveClipboardImageToFile } from './clipboard';
 import * as logger from './logger';
+import { sanitizeFileName } from './sanitize';
 
 class PluginError extends Error {
     constructor(message: string) {
@@ -24,11 +25,7 @@ function getProjectRoot(fileUri: vscode.Uri): string | undefined {
 
 async function ensureDirectoryExists(dirPath: string): Promise<void> {
     const dirUri = vscode.Uri.file(dirPath);
-    try {
-        await vscode.workspace.fs.createDirectory(dirUri);
-    } catch {
-        // Directory may already exist, which is fine
-    }
+    await vscode.workspace.fs.createDirectory(dirUri);
 }
 
 async function createImageDirWithImagePath(imagePath: string): Promise<string> {
@@ -172,11 +169,8 @@ export async function paste(): Promise<void> {
     const projectPath = getProjectRoot(fileUri);
 
     const selection = editor.selection;
-    const selectText = editor.document.getText(selection);
-    if (selectText && /[\\/:"*?<>|]/.test(selectText)) {
-        logger.showInformationMessage('Your selection is not a valid filename!');
-        return;
-    }
+    const rawSelectText = editor.document.getText(selection);
+    const selectText = rawSelectText ? sanitizeFileName(rawSelectText) : '';
 
     let config = loadConfig();
 

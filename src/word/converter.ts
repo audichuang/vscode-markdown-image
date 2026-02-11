@@ -16,7 +16,7 @@ async function getParseHTML(): Promise<ParseHTMLFn> {
         const mod = await import('linkedom');
         _parseHTML = mod.parseHTML as ParseHTMLFn;
     }
-    return _parseHTML!;
+    return _parseHTML;
 }
 
 interface BatchResult {
@@ -77,11 +77,7 @@ export async function convertWordToMarkdown(uri?: vscode.Uri, selectedUris?: vsc
 
     // 確保圖片資料夾存在
     const imagesDirUri = vscode.Uri.file(imagesDir);
-    try {
-        await vscode.workspace.fs.createDirectory(imagesDirUri);
-    } catch {
-        // Directory may already exist
-    }
+    await vscode.workspace.fs.createDirectory(imagesDirUri);
 
     // Step 3: 批次轉換
     const results: BatchResult[] = [];
@@ -264,7 +260,9 @@ function preprocessComplexTables(parseHTML: ParseHTMLFn, html: string): string {
     const { document: doc } = parseHTML(`<body>${html}</body>`);
 
     // 找出所有頂層表格（不是巢狀在其他表格內的）
-    const allTables = doc.querySelectorAll('table');
+    // Use Array.from to create a static snapshot before mutating the DOM
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allTables: any[] = Array.from(doc.querySelectorAll('table'));
 
     for (const table of allTables) {
         // 跳過已經在另一個表格內的表格（巢狀表格）
@@ -432,9 +430,6 @@ function cleanupMarkdown(markdown: string, title: string): string {
 
     return result;
 }
-
-// Re-export sanitizeFileName for external consumers
-export { sanitizeFileName } from '../sanitize';
 
 function showBatchSummary(results: BatchResult[], outputDir: string): void {
     const succeeded = results.filter(r => r.success);
