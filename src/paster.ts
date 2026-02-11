@@ -37,7 +37,7 @@ async function createImageDirWithImagePath(imagePath: string): Promise<string> {
         const stats = await fs.promises.stat(imageDir);
         if (!stats.isDirectory()) {
             throw new PluginError(
-                `The image dest directory '${imageDir}' is a file. Please check your 'pasteImage.path' config.`
+                `The image dest directory '${imageDir}' is a file. Please check your 'markink.imagePath' config.`
             );
         }
         return imagePath;
@@ -171,12 +171,12 @@ export async function paste(): Promise<void> {
     let config = loadConfig();
 
     if (config.folderPath.length !== config.folderPath.trim().length) {
-        logger.showErrorMessage(`The config pasteImage.path = '${config.folderPath}' is invalid. Please check your config.`);
+        logger.showErrorMessage(`The config markink.imagePath = '${config.folderPath}' is invalid. Please check your config.`);
         return;
     }
 
     if (config.basePath.length !== config.basePath.trim().length) {
-        logger.showErrorMessage(`The config pasteImage.basePath = '${config.basePath}' is invalid. Please check your config.`);
+        logger.showErrorMessage(`The config markink.imageBasePath = '${config.basePath}' is invalid. Please check your config.`);
         return;
     }
 

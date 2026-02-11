@@ -21,20 +21,34 @@ export const FILE_PATH_CONFIRM_INPUTBOX_MODE = {
 } as const;
 
 export function loadConfig(): PasteImageConfig {
-    const config = vscode.workspace.getConfiguration('pasteImage');
+    const config = vscode.workspace.getConfiguration('markink');
+    // Legacy fallback: also check pasteImage.* namespace
+    const legacy = vscode.workspace.getConfiguration('pasteImage');
+
+    function get<T>(key: string, markinkKey: string, defaultValue: T): T {
+        const markinkValue = config.inspect<T>(markinkKey);
+        // If user explicitly set markink.*, use it
+        if (markinkValue?.workspaceValue !== undefined ||
+            markinkValue?.workspaceFolderValue !== undefined ||
+            markinkValue?.globalValue !== undefined) {
+            return config.get<T>(markinkKey, defaultValue);
+        }
+        // Otherwise fall back to legacy pasteImage.*
+        return legacy.get<T>(key, defaultValue);
+    }
 
     return {
-        defaultName: config.get<string>('defaultName') || 'YYYY-MM-DD-HH-mm-ss',
-        folderPath: config.get<string>('path') || '${currentFileDir}',
-        basePath: config.get<string>('basePath') || '',
-        prefix: config.get<string>('prefix') || '',
-        suffix: config.get<string>('suffix') || '',
-        forceUnixStyleSeparator: config.get<boolean>('forceUnixStyleSeparator') ?? true,
-        encodePath: config.get<'none' | 'urlEncode' | 'urlEncodeSpace'>('encodePath') || 'urlEncodeSpace',
-        namePrefix: config.get<string>('namePrefix') || '',
-        nameSuffix: config.get<string>('nameSuffix') || '',
-        insertPattern: config.get<string>('insertPattern') || '${imageSyntaxPrefix}${imageFilePath}${imageSyntaxSuffix}',
-        showFilePathConfirmInputBox: config.get<boolean>('showFilePathConfirmInputBox') || false,
-        filePathConfirmInputBoxMode: config.get<'fullPath' | 'onlyName'>('filePathConfirmInputBoxMode') || 'fullPath',
+        defaultName: get('defaultName', 'defaultImageName', 'YYYY-MM-DD-HH-mm-ss'),
+        folderPath: get('path', 'imagePath', '${currentFileDir}'),
+        basePath: get('basePath', 'imageBasePath', '${currentFileDir}'),
+        prefix: get('prefix', 'imagePrefix', ''),
+        suffix: get('suffix', 'imageSuffix', ''),
+        forceUnixStyleSeparator: get('forceUnixStyleSeparator', 'forceUnixStyleSeparator', true),
+        encodePath: get('encodePath', 'encodePath', 'urlEncodeSpace' as const),
+        namePrefix: get('namePrefix', 'imageNamePrefix', ''),
+        nameSuffix: get('nameSuffix', 'imageNameSuffix', ''),
+        insertPattern: get('insertPattern', 'insertPattern', '${imageSyntaxPrefix}${imageFilePath}${imageSyntaxSuffix}'),
+        showFilePathConfirmInputBox: get('showFilePathConfirmInputBox', 'showFilePathConfirmInputBox', false),
+        filePathConfirmInputBoxMode: get('filePathConfirmInputBoxMode', 'filePathConfirmInputBoxMode', 'fullPath' as const),
     };
 }
