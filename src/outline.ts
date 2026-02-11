@@ -1,29 +1,21 @@
 import * as vscode from 'vscode';
 
-interface HeadingItem {
-    level: number;
-    text: string;
-    line: number;
-}
-
 export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineItem>, vscode.Disposable {
     private _onDidChangeTreeData: vscode.EventEmitter<OutlineItem | undefined | null | void> = new vscode.EventEmitter<OutlineItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<OutlineItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
-    private headings: HeadingItem[] = [];
+    private items: OutlineItem[] = [];
     private documentUri: vscode.Uri | undefined;
     private disposables: vscode.Disposable[] = [];
     private refreshTimeout: NodeJS.Timeout | undefined;
 
     constructor() {
-        // Listen for active editor changes
         this.disposables.push(
             vscode.window.onDidChangeActiveTextEditor(() => {
                 this.refresh();
             })
         );
 
-        // Listen for document changes with debounce
         this.disposables.push(
             vscode.workspace.onDidChangeTextDocument((e) => {
                 if (e.document === vscode.window.activeTextEditor?.document) {
@@ -55,45 +47,68 @@ export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineI
 
     refresh(): void {
         this.parseDocument();
-        this._onDidChangeTreeData.fire();
     }
 
-    private parseDocument(): void {
-        this.headings = [];
+    private async parseDocument(): Promise<void> {
+        this.items = [];
         this.documentUri = undefined;
 
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
+            this._onDidChangeTreeData.fire();
             return;
         }
 
         const document = editor.document;
         if (document.languageId !== 'markdown') {
+            this._onDidChangeTreeData.fire();
             return;
         }
 
         this.documentUri = document.uri;
-        const text = document.getText();
-        const lines = text.split(/\r?\n/);
 
-        // Parse headings
-        const headingRegex = /^(#{1,6})\s+(.+)$/;
+        try {
+            const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+                'vscode.executeDocumentSymbolProvider',
+                document.uri
+            );
 
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            const match = line.match(headingRegex);
-
-            if (match) {
-                const level = match[1].length;
-                const headingText = match[2].trim();
-
-                this.headings.push({
-                    level,
-                    text: headingText,
-                    line: i
-                });
+            if (symbols && symbols.length > 0) {
+                this.items = this.convertSymbols(symbols, document.uri);
             }
+        } catch {
+            // Fallback: symbol provider not available yet, ignore
         }
+
+        this._onDidChangeTreeData.fire();
+    }
+
+    private convertSymbols(symbols: vscode.DocumentSymbol[], uri: vscode.Uri, depth: number = 1): OutlineItem[] {
+        const editor = vscode.window.activeTextEditor;
+
+        return symbols.map(symbol => {
+            const children = symbol.children.length > 0
+                ? this.convertSymbols(symbol.children, uri, depth + 1)
+                : [];
+
+            // Read the actual line to get the real heading level from # count
+            let level = depth;
+            if (editor) {
+                const lineText = editor.document.lineAt(symbol.selectionRange.start.line).text;
+                const match = lineText.match(/^(#{1,6})\s/);
+                if (match) {
+                    level = match[1].length;
+                }
+            }
+
+            return new OutlineItem(
+                symbol.name,
+                level,
+                symbol.selectionRange.start.line,
+                uri,
+                children
+            );
+        });
     }
 
     getTreeItem(element: OutlineItem): vscode.TreeItem {
@@ -106,62 +121,10 @@ export class MarkdownOutlineProvider implements vscode.TreeDataProvider<OutlineI
         }
 
         if (!element) {
-            // Root level - return top-level headings with their children nested
-            return Promise.resolve(this.buildTree());
+            return Promise.resolve(this.items);
         }
 
-        // Return children of this element
         return Promise.resolve(element.children || []);
-    }
-
-    private buildTree(): OutlineItem[] {
-        if (this.headings.length === 0) {
-            return [];
-        }
-
-        const items: OutlineItem[] = [];
-        const stack: { item: OutlineItem; level: number }[] = [];
-
-        for (const heading of this.headings) {
-            const item = new OutlineItem(
-                heading.text,
-                heading.level,
-                heading.line,
-                this.documentUri!,
-                []
-            );
-
-            // Find parent
-            while (stack.length > 0 && stack[stack.length - 1].level >= heading.level) {
-                stack.pop();
-            }
-
-            if (stack.length === 0) {
-                // Top-level item
-                items.push(item);
-            } else {
-                // Child item
-                stack[stack.length - 1].item.children.push(item);
-            }
-
-            stack.push({ item, level: heading.level });
-        }
-
-        // Update collapsible state
-        this.updateCollapsibleState(items);
-
-        return items;
-    }
-
-    private updateCollapsibleState(items: OutlineItem[]): void {
-        for (const item of items) {
-            if (item.children.length > 0) {
-                item.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-                this.updateCollapsibleState(item.children);
-            } else {
-                item.collapsibleState = vscode.TreeItemCollapsibleState.None;
-            }
-        }
     }
 }
 
@@ -175,26 +138,24 @@ export class OutlineItem extends vscode.TreeItem {
         public readonly documentUri: vscode.Uri,
         children: OutlineItem[]
     ) {
-        super(text, vscode.TreeItemCollapsibleState.None);
+        super(
+            text,
+            children.length > 0
+                ? vscode.TreeItemCollapsibleState.Expanded
+                : vscode.TreeItemCollapsibleState.None
+        );
         this.children = children;
 
-        // Set icon based on heading level
         this.iconPath = new vscode.ThemeIcon(this.getIconForLevel(level));
-
-        // Set description to show heading level
         this.description = `H${level}`;
 
-        // Set command to jump to this heading
         this.command = {
             command: 'markink.gotoHeading',
             title: 'Go to Heading',
             arguments: [this.documentUri, this.line]
         };
 
-        // Set tooltip
         this.tooltip = `${text} (Line ${line + 1})`;
-
-        // Set context value for potential context menu actions
         this.contextValue = 'heading';
     }
 
