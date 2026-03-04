@@ -128,12 +128,16 @@ export async function convertWordToMarkdown(uri?: vscode.Uri, selectedUris?: vsc
 
                 log(`Converted ${wordFilePath} to ${mdFilePath}, extracted ${result.imageCount} images`);
             } catch (err) {
+                const error = err as Error;
                 results.push({
                     fileName: wordFileName,
                     success: false,
-                    error: (err as Error).message
+                    error: error.message
                 });
-                log(`Conversion error (${wordFileName}): ${(err as Error).message}`);
+                log(`Conversion error (${wordFileName}): ${error.message}`);
+                if (error.stack) {
+                    log(`Stack: ${error.stack}`);
+                }
             }
         }
     });
@@ -166,7 +170,7 @@ export async function convertDocxWithImages(
                 // 高亮
                 "highlight => mark"
             ],
-            convertImage: mammoth.images.imgElement(async function(image) {
+            convertImage: mammoth.images.imgElement(async function (image) {
                 try {
                     const imageBuffer = await image.read();
                     const contentType = image.contentType || 'image/png';
@@ -224,10 +228,10 @@ export async function convertDocxWithImages(
 
     // 處理已標記的複雜表格（用 complex-table 標籤包裹）
     turndownService.addRule('complexTable', {
-        filter: function(node) {
+        filter: function (node) {
             return node.nodeName.toLowerCase() === 'complex-table';
         },
-        replacement: function(_content, node) {
+        replacement: function (_content, node) {
             // 直接返回內部的 HTML（已保存在 data 屬性中）
             const originalHtml = (node as unknown as { getAttribute(name: string): string | null }).getAttribute('data-html') || '';
             return '\n\n' + originalHtml + '\n\n';
@@ -237,7 +241,7 @@ export async function convertDocxWithImages(
     // 簡單表格轉成 Markdown
     turndownService.addRule('simpleTable', {
         filter: 'table',
-        replacement: function(_content, node) {
+        replacement: function (_content, node) {
             const tableHtml = (node as unknown as { outerHTML?: string }).outerHTML || '';
             return convertSimpleTableToMarkdown(parseHTML, tableHtml, turndownService);
         }
@@ -441,22 +445,20 @@ function showBatchSummary(results: BatchResult[], outputDir: string): void {
         return;
     }
 
+    // Always log failures immediately
+    for (const f of failed) {
+        log(`Conversion failed: ${f.fileName} - ${f.error}`);
+    }
+
     if (failed.length === 0) {
         showInformationMessage(
             `Converted ${succeeded.length} file${succeeded.length > 1 ? 's' : ''}, extracted ${totalImages} image${totalImages !== 1 ? 's' : ''}`
         );
     } else {
-        const failedNames = failed.map(f => f.fileName).join(', ');
+        const failedInfo = failed.map(f => `${f.fileName}: ${f.error}`).join('; ');
         vscode.window.showWarningMessage(
-            `Converted ${succeeded.length}/${results.length} files. Failed: ${failedNames}`,
-            'Show Details'
-        ).then(selection => {
-            if (selection === 'Show Details') {
-                for (const f of failed) {
-                    log(`Failed: ${f.fileName} - ${f.error}`);
-                }
-            }
-        });
+            `Converted ${succeeded.length}/${results.length} files. Failed: ${failedInfo}`
+        );
     }
 
     // 開啟輸出目錄
