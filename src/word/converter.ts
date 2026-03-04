@@ -261,7 +261,7 @@ export async function convertDocxWithImages(
  * 這樣可以確保複雜表格的原始 HTML 被完整保留
  */
 function preprocessComplexTables(parseHTML: ParseHTMLFn, html: string): string {
-    const { document: doc } = parseHTML(`<body>${html}</body>`);
+    const { document: doc } = parseHTML(`<!DOCTYPE html><html><body>${html}</body></html>`);
 
     // 找出所有頂層表格（不是巢狀在其他表格內的）
     // Use Array.from to create a static snapshot before mutating the DOM
@@ -326,7 +326,7 @@ function isComplexTable(table: any): boolean {
  * 使用 TurndownService 處理單元格內容，保留粗體、連結等格式
  */
 function convertSimpleTableToMarkdown(parseHTML: ParseHTMLFn, tableHtml: string, turndownService: TurndownService): string {
-    const { document: doc } = parseHTML(`<body>${tableHtml}</body>`);
+    const { document: doc } = parseHTML(`<!DOCTYPE html><html><body>${tableHtml}</body></html>`);
     const table = doc.querySelector('table');
 
     if (!table) {
