@@ -8,7 +8,9 @@ const buildOptions = {
   outfile: 'dist/extension.js',
   external: [
     'vscode',
-    'linkedom',       // ESM-only，必須 external
+    // Note: linkedom was previously external but is now bundled.
+    // Its 14 transitive dependencies (htmlparser2, css-select, etc.)
+    // caused VSIX packaging issues when only linkedom was whitelisted.
     'canvas',         // 原生模組，無法打包
     'bufferutil',     // 原生模組，無法打包
     'utf-8-validate', // 原生模組，無法打包

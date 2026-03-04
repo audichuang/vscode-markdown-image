@@ -21,6 +21,5 @@ res/vscode-paste-image.gif
 .github/**
 word2md-main/**
 
-# Node modules - esbuild bundles everything except linkedom (ESM external)
+# Node modules - everything is bundled by esbuild
 node_modules/**
-!node_modules/linkedom/**
