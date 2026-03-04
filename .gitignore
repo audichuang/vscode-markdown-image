@@ -7,5 +7,5 @@ npm-debug.log*
 .DS_Store
 .idea
 word2md-main
-src/test/fixtures
+src/test/fixtures/output_*
 src/test/testV3Convert.ts

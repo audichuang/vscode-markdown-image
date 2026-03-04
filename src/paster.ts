@@ -185,6 +185,8 @@ export async function paste(): Promise<void> {
     }
 
     // Replace path variables in config values
+    const rawFolderPath = config.folderPath;
+    const rawBasePath = config.basePath;
     config = {
         ...config,
         defaultName: replacePathVariables(config.defaultName, projectPath, filePath, (x) => `[${x}]`),
@@ -194,11 +196,14 @@ export async function paste(): Promise<void> {
         nameSuffix: replacePathVariables(config.nameSuffix, projectPath, filePath),
         insertPattern: replacePathVariables(config.insertPattern, projectPath, filePath),
     };
+    logger.log(`[paste] imagePath: "${rawFolderPath}" → "${config.folderPath}"`);
+    logger.log(`[paste] basePath: "${rawBasePath}" → "${config.basePath}"`);
 
     const imagePath = await getImagePath(filePath, selectText, config);
     if (!imagePath) {
         return;
     }
+    logger.log(`[paste] final imagePath: "${imagePath}"`);
 
     // Use async file check to avoid blocking UI
     let exists = false;

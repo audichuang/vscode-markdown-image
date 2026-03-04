@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { loadConfig } from './config';
 import { log, showInformationMessage } from './logger';
 
 interface PathOption {
@@ -193,22 +194,34 @@ export async function configureSettings(): Promise<void> {
 }
 
 export async function showCurrentSettings(): Promise<void> {
-    const config = vscode.workspace.getConfiguration('markink');
+    const effectiveConfig = loadConfig();
 
-    const imagePath = config.get<string>('imagePath') || '${currentFileDir}';
-    const imageBasePath = config.get<string>('imageBasePath') || '${currentFileDir}';
-    const defaultName = config.get<string>('defaultImageName') || 'YYYY-MM-DD-HH-mm-ss';
-    const insertPattern = config.get<string>('insertPattern') || '${imageSyntaxPrefix}${imageFilePath}${imageSyntaxSuffix}';
+    const markinkConfig = vscode.workspace.getConfiguration('markink');
+    const legacyConfig = vscode.workspace.getConfiguration('pasteImage');
+
+    function getSource(markinkKey: string, legacyKey: string): string {
+        const mi = markinkConfig.inspect(markinkKey);
+        const li = legacyConfig.inspect(legacyKey);
+        const markinkSet = mi?.workspaceFolderValue !== undefined || mi?.workspaceValue !== undefined || mi?.globalValue !== undefined;
+        const legacySet = li?.workspaceFolderValue !== undefined || li?.workspaceValue !== undefined || li?.globalValue !== undefined;
+        if (markinkSet && legacySet) { return '⚠️ markink (legacy 已忽略)'; }
+        if (markinkSet) { return '✅ markink'; }
+        if (legacySet) { return '🔄 legacy pasteImage'; }
+        return '📋 預設值';
+    }
+
+    const pathSource = getSource('imagePath', 'path');
+    const basePathSource = getSource('imageBasePath', 'basePath');
 
     const info = `
 **MarkInk 當前設定**
 
-| 設定項 | 值 |
-|--------|-----|
-| 圖片路徑 | \`${imagePath}\` |
-| 基準路徑 | \`${imageBasePath}\` |
-| 預設檔名 | \`${defaultName}\` |
-| 插入格式 | \`${insertPattern}\` |
+| 設定項 | 生效值 | 來源 |
+|--------|--------|------|
+| 圖片路徑 (imagePath) | \`${effectiveConfig.folderPath}\` | ${pathSource} |
+| 基準路徑 (imageBasePath) | \`${effectiveConfig.basePath}\` | ${basePathSource} |
+| 預設檔名 | \`${effectiveConfig.defaultName}\` | ${getSource('defaultImageName', 'defaultName')} |
+| 插入格式 | \`${effectiveConfig.insertPattern}\` | ${getSource('insertPattern', 'insertPattern')} |
     `.trim();
 
     const doc = await vscode.workspace.openTextDocument({
@@ -218,3 +231,4 @@ export async function showCurrentSettings(): Promise<void> {
 
     await vscode.window.showTextDocument(doc, { preview: true });
 }
+

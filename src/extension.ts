@@ -11,6 +11,7 @@ import { convertWordToMarkdown } from './word';
 import { checkImageLinks, initDiagnostics, initReportProvider } from './imageChecker';
 import { initLogger, log, showErrorMessage } from './logger';
 import { migrateLegacySettings } from './config';
+import { registerPasteProvider } from './pasteProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
     initLogger(context);
@@ -24,6 +25,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }).catch((e) => {
         log(`Failed to migrate legacy settings: ${(e as Error).message}`);
     });
+
+    // === Paste Provider (intercepts Cmd+V / Ctrl+V for images) ===
+    registerPasteProvider(context);
 
     // === Image Commands ===
     const pasteDisposable = vscode.commands.registerCommand('markink.pasteImage', async () => {
